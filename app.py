@@ -8,7 +8,7 @@ from docx.enum.section import WD_ORIENT
 import random
 import io
 
-# 主題顏色與標題
+# 主題設定
 st.set_page_config(page_title="志兵班試卷生成器", layout="wide")
 
 # 標題與簡介
@@ -22,18 +22,16 @@ st.markdown("""
 """)
 st.divider()
 
-# 分為左右兩列
+# 分頁佈局
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    # 使用者輸入基本信息
     st.header("📋 基本設定")
     class_name = st.text_input("請輸入班級名稱（如113-1）", value="113-X")
     exam_type = st.selectbox("請選擇考試類型", ["期中", "期末"])
     subject = st.selectbox("請選擇科目", ["法律", "專業"])
 
 with col2:
-    # 上傳題庫檔案
     st.header("📤 上傳題庫")
     st.markdown("請選擇 **6 個 Excel 檔案**，每個檔案代表一個題庫。")
     uploaded_files = st.file_uploader("上傳題庫檔案（最多 6 個）", accept_multiple_files=True, type=["xlsx"])
@@ -45,7 +43,6 @@ if uploaded_files:
 
 st.divider()
 
-# 開始生成試卷
 if uploaded_files and len(uploaded_files) == 6:
     if st.button("✨ 生成試卷"):
         with st.spinner("正在生成試卷，請稍候..."):
@@ -87,8 +84,13 @@ if uploaded_files and len(uploaded_files) == 6:
                     for _, row in selected_rows.iterrows():
                         difficulty_counts['難' if '（難）' in row.iloc[1] else '中' if '（中）' in row.iloc[1] else '易'] += 1
                         question_para = doc.add_paragraph(f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}")
-                        question_para.paragraph_format.left_indent = Cm(1)
-                        question_para.paragraph_format.first_line_indent = Cm(-1)
+
+                        # 設置段落格式，懸掛縮進 2.25 公分
+                        paragraph_format = question_para.paragraph_format
+                        paragraph_format.first_line_indent = Cm(0)  # 首行不縮進
+                        paragraph_format.left_indent = Cm(1)  # 整體段落縮進 1 公分
+                        paragraph_format.hanging_indent = Cm(2.25)  # 懸掛縮進 2.25 公分
+
                         for run in question_para.runs:
                             run.font.name, run.font.size = '標楷體', Pt(16)
                             run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
@@ -109,4 +111,3 @@ if uploaded_files and len(uploaded_files) == 6:
                 st.download_button(label=f"下載 {paper_type}", data=buffer, file_name=filename, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
         st.success("🎉 試卷生成完成！")
-
