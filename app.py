@@ -9,11 +9,11 @@ import random
 import io
 
 # 主題設定
-st.set_page_config(page_title="志願士兵階段試卷生成器 Web UI", page_icon="📄", layout="wide")
+st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide")
 
 # 頁面標題與簡介
 st.markdown("""
-# 📄 志願士兵階段試卷生成器 Web UI
+# 📄 志兵班試卷生成器
 **輕鬆生成專業格式的試卷！**  
 按照以下步驟完成試卷生成：
 1. 填寫基本資訊。
@@ -47,7 +47,9 @@ if uploaded_files:
 # 分隔線
 st.divider()
 
-# 生成試卷
+# 保存生成的試卷數據
+exam_papers = {}
+
 if uploaded_files and len(uploaded_files) == 6:
     if st.button("✨ 開始生成試卷"):
         with st.spinner("正在生成試卷，請稍候..."):
@@ -107,13 +109,23 @@ if uploaded_files and len(uploaded_files) == 6:
                 summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
                 doc.add_paragraph(summary_text)
 
-                # 保存試卷
+                # 保存到內存
                 buffer = io.BytesIO()
                 doc.save(buffer)
                 buffer.seek(0)
 
-                # 提供下載連結
-                filename = f"{class_name}_{exam_type}_{subject}_{paper_type}.docx"
-                st.download_button(label=f"下載 {paper_type}", data=buffer, file_name=filename, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                # 將生成的試卷緩存到字典中
+                exam_papers[paper_type] = buffer
 
         st.success("🎉 試卷生成完成！")
+
+    # 在生成完成後顯示所有的下載按鈕
+    if exam_papers:
+        st.markdown("## 📥 下載試卷")
+        for paper_type, buffer in exam_papers.items():
+            st.download_button(
+                label=f"下載 {paper_type}",
+                data=buffer.getvalue(),
+                file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
