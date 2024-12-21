@@ -3,7 +3,8 @@ import pandas as pd
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.oxml.ns import qn
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT, WD_ORIENT
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.section import WD_ORIENT
 import random
 import io
 
