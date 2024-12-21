@@ -13,7 +13,7 @@ st.set_page_config(page_title="志願士兵階段試卷生成器 Web UI", page_i
 
 # 頁面標題與簡介
 st.markdown("""
-# 📄 志兵班試卷生成器
+# 📄 志願士兵階段試卷生成器 Web UI
 **輕鬆生成專業格式的試卷！**  
 按照以下步驟完成試卷生成：
 1. 填寫基本資訊。
