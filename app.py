@@ -95,10 +95,11 @@ if uploaded_files and len(uploaded_files) == 6:
 
                         # 段落格式設置
                         paragraph_format = question_para.paragraph_format
-                        paragraph_format.left_indent = Cm(0)
-                        paragraph_format.right_indent = Cm(0)
-                        paragraph_format.hanging_indent = Pt(4 * 0.35)
-                        paragraph_format.space_after = Pt(0)
+                        paragraph_format.left_indent = Cm(0)  # 整體左縮進 0 公分
+                        paragraph_format.right_indent = Cm(0)  # 整體右縮進 0 公分
+                        paragraph_format.hanging_indent = Pt(4 * 0.35)  # 懸掛縮進 4 字元
+                        paragraph_format.space_after = Pt(0)  # 段落後距設置為 0 點
+                        paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY  # 左右對齊
 
                         for run in question_para.runs:
                             run.font.name = '標楷體'
@@ -109,7 +110,8 @@ if uploaded_files and len(uploaded_files) == 6:
 
                 # 添加難度統計
                 summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
-                doc.add_paragraph(summary_text)
+                summary_para = doc.add_paragraph(summary_text)
+                summary_para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
 
                 # 保存到內存
                 buffer = io.BytesIO()
