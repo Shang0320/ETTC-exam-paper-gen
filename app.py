@@ -9,7 +9,7 @@ import random
 import io
 
 # Web UI 標題
-st.title("考試試卷生成工具")
+st.title("志兵班試卷生成WEB UI")
 
 # 使用者輸入基本信息
 class_name = st.text_input("請輸入班級名稱（如113-1）", value="113-X")
