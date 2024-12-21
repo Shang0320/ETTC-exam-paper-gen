@@ -9,13 +9,16 @@ import random
 import io
 
 # 主題設定
-st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide")
+st.set_page_config(page_title="志願士兵階段試卷生成器 Web UI", page_icon="📄", layout="wide")
 
 # 頁面標題與簡介
 st.markdown("""
 # 📄 志兵班試卷生成器
-**歡迎使用試卷生成工具！**  
-輕鬆上傳題庫，快速生成標準化的 A 卷與 B 卷試卷，並支持下載 Word 文件。
+**輕鬆生成專業格式的試卷！**  
+按照以下步驟完成試卷生成：
+1. 填寫基本資訊。
+2. 上傳題庫檔案（6 個 Excel 文件）。
+3. 點擊生成按鈕，下載標準化的 A 卷與 B 卷。
 """)
 
 # 分隔線
@@ -27,14 +30,14 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.markdown("## 📋 基本設定")
     # 使用者輸入基本信息
-    class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱（例如：113-1）")
+    class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
     exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
     subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
 
 with col2:
     st.markdown("## 📤 上傳題庫")
     st.markdown("請上傳 **6 個 Excel 文件**，每個文件代表一個題庫")
-    uploaded_files = st.file_uploader("上傳題庫檔案（6 個）", accept_multiple_files=True, type=["xlsx"])
+    uploaded_files = st.file_uploader("上傳題庫檔案（最多 6 個）", accept_multiple_files=True, type=["xlsx"])
 
 if uploaded_files:
     st.success(f"✅ 已成功上傳 {len(uploaded_files)} 個檔案！")
@@ -91,7 +94,8 @@ if uploaded_files and len(uploaded_files) == 6:
                         paragraph_format = question_para.paragraph_format
                         paragraph_format.left_indent = Cm(0)  # 整體左縮進 0 公分
                         paragraph_format.right_indent = Cm(0)  # 整體右縮進 0 公分
-                        paragraph_format.hanging_indent = Cm(2.25)  # 懸掛縮進 2.25 公分
+                        paragraph_format.hanging_indent = Pt(4 * 0.35)  # 凸排 4 字元（約等於 1 公分）
+                        paragraph_format.space_after = Pt(0)  # 段落後距設置為 0 點
 
                         for run in question_para.runs:
                             run.font.name, run.font.size = '標楷體', Pt(16)
@@ -113,4 +117,3 @@ if uploaded_files and len(uploaded_files) == 6:
                 st.download_button(label=f"下載 {paper_type}", data=buffer, file_name=filename, mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
         st.success("🎉 試卷生成完成！")
-
