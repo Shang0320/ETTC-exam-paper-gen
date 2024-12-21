@@ -9,11 +9,11 @@ import random
 import io
 
 # 主題設定
-st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide")
+st.set_page_config(page_title="試卷生成器Web UI", page_icon="📄", layout="wide")
 
 # 頁面標題與簡介
 st.markdown("""
-# 📄 志兵班試卷生成器
+# 📄 志兵班試卷生成器Web UI
 **輕鬆生成專業格式的試卷！**  
 按照以下步驟完成試卷生成：
 1. 填寫基本資訊。
@@ -44,11 +44,12 @@ if uploaded_files:
     if len(uploaded_files) != 6:
         st.warning("⚠️ 請上傳 6 個文件，否則無法生成完整試卷。")
 
+# 初始化 Session State 中的緩存
+if "exam_papers" not in st.session_state:
+    st.session_state.exam_papers = {}
+
 # 分隔線
 st.divider()
-
-# 保存生成的試卷數據
-exam_papers = {}
 
 if uploaded_files and len(uploaded_files) == 6:
     if st.button("✨ 開始生成試卷"):
@@ -96,11 +97,11 @@ if uploaded_files and len(uploaded_files) == 6:
                         paragraph_format = question_para.paragraph_format
                         paragraph_format.left_indent = Cm(0)  # 整體左縮進 0 公分
                         paragraph_format.right_indent = Cm(0)  # 整體右縮進 0 公分
-                        paragraph_format.hanging_indent = Pt(4 * 0.35)  # 凸排 4 字元（約等於 1 公分）
                         paragraph_format.space_after = Pt(0)  # 段落後距設置為 0 點
+                        paragraph_format.hanging_indent = Pt(4 * 0.35)  # 凸排 4 字元（約等於 1 公分）
 
                         for run in question_para.runs:
-                            run.font.name, run.font.size = '標楷體', Pt(16)
+                            run.font.name = '標楷體', Pt(16)
                             run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
                         question_number += 1
@@ -114,18 +115,18 @@ if uploaded_files and len(uploaded_files) == 6:
                 doc.save(buffer)
                 buffer.seek(0)
 
-                # 將生成的試卷緩存到字典中
-                exam_papers[paper_type] = buffer
+                # 將生成的試卷緩存到 Session State
+                st.session_state.exam_papers[paper_type] = buffer.getvalue()
 
         st.success("🎉 試卷生成完成！")
 
-    # 在生成完成後顯示所有的下載按鈕
-    if exam_papers:
-        st.markdown("## 📥 下載試卷")
-        for paper_type, buffer in exam_papers.items():
-            st.download_button(
-                label=f"下載 {paper_type}",
-                data=buffer.getvalue(),
-                file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
+# 顯示下載按鈕
+if "exam_papers" in st.session_state and st.session_state.exam_papers:
+    st.markdown("## 📥 下載試卷")
+    for paper_type, file_data in st.session_state.exam_papers.items():
+        st.download_button(
+            label=f"下載 {paper_type}",
+            data=file_data,
+            file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
