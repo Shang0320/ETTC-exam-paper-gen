@@ -9,11 +9,11 @@ import random
 import io
 
 # 主題設定
-st.set_page_config(page_title="試卷生成器Web UI", page_icon="📄", layout="wide")
+st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide")
 
 # 頁面標題與簡介
 st.markdown("""
-# 📄 志兵班試卷生成器Web UI
+# 📄 志兵班試卷生成器
 **輕鬆生成專業格式的試卷！**  
 按照以下步驟完成試卷生成：
 1. 填寫基本資訊。
@@ -29,7 +29,6 @@ col1, col2 = st.columns([1, 2])
 
 with col1:
     st.markdown("## 📋 基本設定")
-    # 使用者輸入基本信息
     class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
     exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
     subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
@@ -67,7 +66,8 @@ if uploaded_files and len(uploaded_files) == 6:
                 # 添加標題
                 header_para = doc.add_paragraph()
                 header_run = header_para.add_run(f"海巡署教育訓練測考中心{class_name}梯志願士兵司法警察專長班{exam_type}測驗階段考試（{subject}{paper_type}）")
-                header_run.font.name, header_run.font.size = '標楷體', Pt(20)
+                header_run.font.name = '標楷體'
+                header_run.font.size = Pt(20)
                 header_run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                 header_para.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
@@ -95,13 +95,14 @@ if uploaded_files and len(uploaded_files) == 6:
 
                         # 段落格式設置
                         paragraph_format = question_para.paragraph_format
-                        paragraph_format.left_indent = Cm(0)  # 整體左縮進 0 公分
-                        paragraph_format.right_indent = Cm(0)  # 整體右縮進 0 公分
-                        paragraph_format.space_after = Pt(0)  # 段落後距設置為 0 點
-                        paragraph_format.hanging_indent = Pt(4 * 0.35)  # 凸排 4 字元（約等於 1 公分）
+                        paragraph_format.left_indent = Cm(0)
+                        paragraph_format.right_indent = Cm(0)
+                        paragraph_format.hanging_indent = Pt(4 * 0.35)
+                        paragraph_format.space_after = Pt(0)
 
                         for run in question_para.runs:
-                            run.font.name = '標楷體', Pt(16)
+                            run.font.name = '標楷體'
+                            run.font.size = Pt(16)
                             run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
                         question_number += 1
