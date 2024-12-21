@@ -13,7 +13,7 @@ st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide"
 
 # 頁面標題與簡介
 st.markdown("""
-# 📄 志兵班試卷生成器
+# 📄 志兵班試卷生成器WEB UI
 **輕鬆生成專業格式的試卷！**  
 按照以下步驟完成試卷生成：
 1. 填寫基本資訊。
