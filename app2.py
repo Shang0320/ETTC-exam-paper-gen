@@ -16,10 +16,6 @@ st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide"
 
 # Google Drive 資料夾 ID
 ROOT_FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
-SUBJECT_MAPPING = {
-    "法律": "法律",
-    "專業": "專業"
-}
 
 # 建立 Google Drive API 服務
 def create_drive_service():
@@ -30,24 +26,11 @@ def create_drive_service():
     )
     return build('drive', 'v3', credentials=credentials)
 
-# 遞迴列出指定資料夾及其子資料夾內的所有檔案
-def list_files_recursively(service, folder_id):
-    all_files = []
-    folders_to_process = [folder_id]
-
-    while folders_to_process:
-        current_folder_id = folders_to_process.pop()
-        query = f"'{current_folder_id}' in parents and trashed=false"
-        result = service.files().list(q=query, fields='files(id, name, mimeType)').execute()
-        files = result.get('files', [])
-
-        for file in files:
-            if file['mimeType'] == 'application/vnd.google-apps.folder':
-                folders_to_process.append(file['id'])
-            else:
-                all_files.append(file)
-
-    return all_files
+# 遞迴列出指定資料夾內的檔案
+def list_files(service, folder_id):
+    query = f"'{folder_id}' in parents and trashed=false"
+    result = service.files().list(q=query, fields='files(id, name, mimeType)').execute()
+    return result.get('files', [])
 
 # 下載檔案為二進位格式
 def download_file(service, file_id):
@@ -60,26 +43,8 @@ def download_file(service, file_id):
     fh.seek(0)
     return fh
 
-# 列出所有題庫
-def display_topics_selection(service, subject_folder_id):
-    files = list_files_recursively(service, subject_folder_id)
-    topics = {file['name']: file['id'] for file in files if file['mimeType'] == 'application/vnd.google-apps.folder'}
-
-    if not topics:
-        st.warning("該科目下未找到任何題庫資料夾，請檢查設定！")
-        return None
-
-    selected_topics = st.multiselect("選擇題庫", list(topics.keys()))
-
-    if len(selected_topics) != 6:
-        st.warning("請選擇 6 個題庫來生成試卷！")
-        return None
-
-    if st.button("生成考卷"):
-        return {topic: topics[topic] for topic in selected_topics}
-
 # 生成試卷
-def generate_exam(selected_topics, service, class_name, exam_type, subject):
+def generate_exam(selected_files, service, class_name, exam_type, subject):
     exam_papers = {}
 
     for paper_type in ["A卷", "B卷"]:
@@ -111,35 +76,31 @@ def generate_exam(selected_topics, service, class_name, exam_type, subject):
         question_number = 1
         difficulty_counts = {'難': 0, '中': 0, '易': 0}
 
-        for topic, topic_id in selected_topics.items():
-            files = list_files_recursively(service, topic_id)
-            excel_files = [file for file in files if file['mimeType'] in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel']]
+        for file_id in selected_files:
+            file_content = download_file(service, file_id)
+            df = pd.read_excel(file_content, engine='openpyxl')
+            random.seed(1 if paper_type == "A卷" else 2)
+            selected_rows = df.sample(n=min(10, len(df)))
 
-            for file in excel_files:
-                file_content = download_file(service, file['id'])
-                df = pd.read_excel(file_content, engine='openpyxl')
-                random.seed(1 if paper_type == "A卷" else 2)
-                selected_rows = df.sample(n=min(10, len(df)))
+            for _, row in selected_rows.iterrows():
+                difficulty_counts['難' if '（難）' in row.iloc[1] else '中' if '（中）' in row.iloc[1] else '易'] += 1
+                question_text = f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}"
+                question_para = doc.add_paragraph(question_text)
 
-                for _, row in selected_rows.iterrows():
-                    difficulty_counts['難' if '（難）' in row.iloc[1] else '中' if '（中）' in row.iloc[1] else '易'] += 1
-                    question_text = f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}"
-                    question_para = doc.add_paragraph(question_text)
+                # 段落格式設置
+                paragraph_format = question_para.paragraph_format
+                paragraph_format.left_indent = Cm(0)
+                paragraph_format.right_indent = Cm(0)
+                paragraph_format.hanging_indent = Pt(4 * 0.35)
+                paragraph_format.space_after = Pt(0)
+                paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
 
-                    # 段落格式設置
-                    paragraph_format = question_para.paragraph_format
-                    paragraph_format.left_indent = Cm(0)
-                    paragraph_format.right_indent = Cm(0)
-                    paragraph_format.hanging_indent = Pt(4 * 0.35)
-                    paragraph_format.space_after = Pt(0)
-                    paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+                for run in question_para.runs:
+                    run.font.name = '標楷體'
+                    run.font.size = Pt(16)
+                    run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
-                    for run in question_para.runs:
-                        run.font.name = '標楷體'
-                        run.font.size = Pt(16)
-                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-
-                    question_number += 1
+                question_number += 1
 
         # 添加難度統計
         summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
@@ -158,25 +119,34 @@ service = create_drive_service()
 st.markdown("## 📋 基本設定")
 class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
 exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
-subject = st.selectbox("科目", ["-", "法律", "專業"], help="選擇科目類型")
+subject = st.selectbox("科目", ["請選擇", "法律", "專業"], help="選擇科目類型")
 
-if subject:
-    subject_folder_name = SUBJECT_MAPPING[subject]
-    files = list_files_recursively(service, ROOT_FOLDER_ID)
-    subject_folder_id = next((file['id'] for file in files if file['name'] == subject_folder_name), None)
+if subject and subject != "請選擇":
+    st.markdown(f"### 已選科目：{subject}")
+    folders = list_files(service, ROOT_FOLDER_ID)
+    subject_folder = next((folder for folder in folders if folder['name'] == subject), None)
 
-    if subject_folder_id:
-        selected_topics = display_topics_selection(service, subject_folder_id)
+    if subject_folder:
+        topic_files = list_files(service, subject_folder['id'])
+        topic_options = {file['name']: file['id'] for file in topic_files if file['mimeType'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
 
-        if selected_topics:
-            st.info("正在生成試卷，請稍候...")
-            exam_papers = generate_exam(selected_topics, service, class_name, exam_type, subject)
-            st.success("試卷生成完成！")
+        if topic_options:
+            selected_files = st.multiselect("選擇題庫檔案（限 6 個）", options=list(topic_options.keys()))
 
-            for paper_type, file_data in exam_papers.items():
-                st.download_button(
-                    label=f"下載 {paper_type}",
-                    data=file_data,
-                    file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                )
+            if len(selected_files) == 6 and st.button("生成考卷"):
+                selected_file_ids = [topic_options[name] for name in selected_files]
+                st.info("正在生成試卷，請稍候...")
+                exam_papers = generate_exam(selected_file_ids, service, class_name, exam_type, subject)
+                st.success("試卷生成完成！")
+
+                for paper_type, file_data in exam_papers.items():
+                    st.download_button(
+                        label=f"下載 {paper_type}",
+                        data=file_data,
+                        file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+        else:
+            st.warning("未找到任何題庫檔案，請確認資料夾內容！")
+    else:
+        st.error("未找到對應的科目資料夾，請確認設置！")
