@@ -56,23 +56,14 @@ def download_file(service, file_id):
     fh.seek(0)
     return fh
 
-# 顯示題庫選項
-def display_subject_selection(service, root_folder_id):
+# 列出所有題庫
+def display_topics_selection(service, root_folder_id):
     files = list_files_recursively(service, root_folder_id)
-    subjects = {file['name']: file['id'] for file in files if file['mimeType'] == 'application/vnd.google-apps.folder'}
-    selected_subject = st.radio("選擇大項目", list(subjects.keys()))
-
-    if st.button("下一步"):
-        return subjects[selected_subject]
-
-# 列出子資料夾中的科目
-def display_topics_selection(service, subject_folder_id):
-    files = list_files_recursively(service, subject_folder_id)
     topics = {file['name']: file['id'] for file in files if file['mimeType'] == 'application/vnd.google-apps.folder'}
-    selected_topics = st.multiselect("選擇科目", list(topics.keys()))
+    selected_topics = st.multiselect("選擇題庫", list(topics.keys()))
 
     if len(selected_topics) != 6:
-        st.warning("請選擇 6 個科目來生成試卷！")
+        st.warning("請選擇 6 個題庫來生成試卷！")
         return None
 
     if st.button("生成考卷"):
@@ -160,20 +151,17 @@ class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級�
 exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
 subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
 
-subject_folder_id = display_subject_selection(service, ROOT_FOLDER_ID)
+selected_topics = display_topics_selection(service, ROOT_FOLDER_ID)
 
-if subject_folder_id:
-    selected_topics = display_topics_selection(service, subject_folder_id)
+if selected_topics:
+    st.info("正在生成試卷，請稍候...")
+    exam_papers = generate_exam(selected_topics, service, class_name, exam_type, subject)
+    st.success("試卷生成完成！")
 
-    if selected_topics:
-        st.info("正在生成試卷，請稍候...")
-        exam_papers = generate_exam(selected_topics, service, class_name, exam_type, subject)
-        st.success("試卷生成完成！")
-
-        for paper_type, file_data in exam_papers.items():
-            st.download_button(
-                label=f"下載 {paper_type}",
-                data=file_data,
-                file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
+    for paper_type, file_data in exam_papers.items():
+        st.download_button(
+            label=f"下載 {paper_type}",
+            data=file_data,
+            file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
