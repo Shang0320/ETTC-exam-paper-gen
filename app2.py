@@ -1,15 +1,24 @@
 import streamlit as st
+import pandas as pd
+from docx import Document
+from docx.shared import Pt, Cm
+from docx.oxml.ns import qn
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.section import WD_ORIENT
+import random
+import io
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2 import service_account
-import pandas as pd
-import io
+
+# 主題設定
+st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide")
 
 # Google Drive 資料夾 ID
-FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
+ROOT_FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
 
+# 建立 Google Drive API 服務
 def create_drive_service():
-    """以 Service Account 建立 Google Drive API 服務，從 Streamlit Secrets 中讀取憑證。"""
     service_account_info = st.secrets["service_account_json"]
     credentials = service_account.Credentials.from_service_account_info(
         service_account_info,
@@ -17,28 +26,27 @@ def create_drive_service():
     )
     return build('drive', 'v3', credentials=credentials)
 
+# 遞迴列出指定資料夾及其子資料夾內的所有檔案
 def list_files_recursively(service, folder_id):
-    """遞迴列出指定資料夾及其子資料夾內的所有檔案。"""
     all_files = []
-    folders_to_process = [folder_id]  # 初始化待處理資料夾清單
+    folders_to_process = [folder_id]
 
     while folders_to_process:
         current_folder_id = folders_to_process.pop()
         query = f"'{current_folder_id}' in parents and trashed=false"
         result = service.files().list(q=query, fields='files(id, name, mimeType)').execute()
         files = result.get('files', [])
-        
+
         for file in files:
-            # 如果是子資料夾，加入待處理清單
             if file['mimeType'] == 'application/vnd.google-apps.folder':
                 folders_to_process.append(file['id'])
             else:
-                all_files.append(file)  # 只加入非資料夾檔案
-    
+                all_files.append(file)
+
     return all_files
 
+# 下載檔案為二進位格式
 def download_file(service, file_id):
-    """從 Google Drive 下載檔案為二進位格式。"""
     request = service.files().get_media(fileId=file_id)
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
@@ -48,60 +56,72 @@ def download_file(service, file_id):
     fh.seek(0)
     return fh
 
-def main():
-    st.title("Google Drive 檔案選擇器")
+# 顯示題庫選項
+def display_subject_selection(service, root_folder_id):
+    files = list_files_recursively(service, root_folder_id)
+    subjects = {file['name']: file['id'] for file in files if file['mimeType'] == 'application/vnd.google-apps.folder'}
+    selected_subject = st.radio("選擇大項目", list(subjects.keys()))
 
-    # 建立 Drive 服務
-    service = create_drive_service()
+    if st.button("下一步"):
+        return subjects[selected_subject]
 
-    # 遞迴列出檔案
-    files = list_files_recursively(service, FOLDER_ID)
-    if not files:
-        st.error("該資料夾及其子資料夾中沒有任何檔案，或 Service Account 無法讀取。")
-        return
+# 列出子資料夾中的科目
+def display_topics_selection(service, subject_folder_id):
+    files = list_files_recursively(service, subject_folder_id)
+    topics = {file['name']: file['id'] for file in files if file['mimeType'] == 'application/vnd.google-apps.folder'}
+    selected_topics = st.multiselect("選擇科目", list(topics.keys()))
 
-    # 過濾 Excel 檔案
-    st.write("檔案資訊：")
-    for f in files:
-        st.write(f"檔案名稱: {f['name']}, MIME 類型: {f['mimeType']}")
+    if len(selected_topics) != 6:
+        st.warning("請選擇 6 個科目來生成試卷！")
+        return None
 
-    excel_files = [f for f in files if f['mimeType'] in [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-excel'
-    ]]
+    if st.button("生成考卷"):
+        return {topic: topics[topic] for topic in selected_topics}
 
-    if not excel_files:
-        st.warning("該資料夾及其子資料夾中沒有任何 Excel 檔案。")
-        return
+# 生成試卷
+def generate_exam(selected_topics, service):
+    exam_papers = {}
 
-    # 處理子資料夾中的檔案
-    st.write("檢查子資料夾內的檔案：")
-    for folder in files:
-        if folder['mimeType'] == 'application/vnd.google-apps.folder':
-            subfolder_files = list_files_recursively(service, folder['id'])
-            for subfile in subfolder_files:
-                st.write(f"子資料夾檔案名稱: {subfile['name']}, MIME 類型: {subfile['mimeType']}")
-                if subfile['mimeType'] in [
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    'application/vnd.ms-excel'
-                ]:
-                    excel_files.append(subfile)
+    for paper_type in ["A卷", "B卷"]:
+        doc = Document()
 
-    file_options = {f['name']: f['id'] for f in excel_files}
-    selected_files = st.multiselect("選擇要處理的檔案", options=list(file_options.keys()))
+        for topic, topic_id in selected_topics.items():
+            files = list_files_recursively(service, topic_id)
+            excel_files = [file for file in files if file['mimeType'] in ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel']]
 
-    if st.button("下載並讀取選擇的檔案"):
-        if not selected_files:
-            st.warning("請至少選擇一個檔案！")
-        else:
-            for filename in selected_files:
-                file_id = file_options[filename]
-                file_content = download_file(service, file_id)
-
-                # 使用 Pandas 讀取 Excel 檔案
+            for file in excel_files:
+                file_content = download_file(service, file['id'])
                 df = pd.read_excel(file_content, engine='openpyxl')
-                st.write(f"檔案: {filename}")
-                st.dataframe(df.head())
+                random.seed(1 if paper_type == "A卷" else 2)
+                selected_rows = df.sample(n=min(10, len(df)))
 
-if __name__ == "__main__":
-    main()
+                for _, row in selected_rows.iterrows():
+                    question_text = f"{row.iloc[0]}、{row.iloc[1]}"
+                    doc.add_paragraph(question_text)
+
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        exam_papers[paper_type] = buffer.getvalue()
+
+    return exam_papers
+
+# 主程式
+service = create_drive_service()
+subject_folder_id = display_subject_selection(service, ROOT_FOLDER_ID)
+
+if subject_folder_id:
+    selected_topics = display_topics_selection(service, subject_folder_id)
+
+    if selected_topics:
+        st.info("正在生成試卷，請稍候...")
+        exam_papers = generate_exam(selected_topics, service)
+        st.success("試卷生成完成！")
+
+        for paper_type, file_data in exam_papers.items():
+            st.download_button(
+                label=f"下載 {paper_type}",
+                data=file_data,
+                file_name=f"{paper_type}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
