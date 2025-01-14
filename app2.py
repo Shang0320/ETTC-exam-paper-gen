@@ -162,7 +162,7 @@ if subject:
 
     if subject_folder_id:
         selected_topics = display_topics_selection(service, subject_folder_id)
-啊
+
         if selected_topics:
             st.info("正在生成試卷，請稍候...")
             exam_papers = generate_exam(selected_topics, service, class_name, exam_type, subject)
