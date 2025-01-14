@@ -17,8 +17,8 @@ st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide"
 # Google Drive 資料夾 ID
 ROOT_FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
 SUBJECT_MAPPING = {
-    "法律": "法律",
-    "專業": "專業"
+    "法律": "法律EXCEL",
+    "專業": "專業EXCEL"
 }
 
 # 建立 Google Drive API 服務
@@ -64,6 +64,11 @@ def download_file(service, file_id):
 def display_topics_selection(service, subject_folder_id):
     files = list_files_recursively(service, subject_folder_id)
     topics = {file['name']: file['id'] for file in files if file['mimeType'] == 'application/vnd.google-apps.folder'}
+
+    if not topics:
+        st.warning("該科目下未找到任何題庫資料夾，請檢查設定！")
+        return None
+
     selected_topics = st.multiselect("選擇題庫", list(topics.keys()))
 
     if len(selected_topics) != 6:
