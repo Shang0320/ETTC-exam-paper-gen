@@ -75,12 +75,19 @@ def generate_exam(selected_files, service, class_name, exam_type, subject):
 
         question_number = 1
         difficulty_counts = {'難': 0, '中': 0, '易': 0}
+        total_questions = 0  # 用於計算總題目數
 
         for file_id in selected_files:
             file_content = download_file(service, file_id)
             df = pd.read_excel(file_content, engine='openpyxl')
             random.seed(1 if paper_type == "A卷" else 2)
-            selected_rows = df.sample(n=min(10, len(df)))
+
+            # 確保每題庫抽取的題目不超過 10 題，並且總題數不超過 50 題
+            remaining_questions = 50 - total_questions
+            if remaining_questions <= 0:
+                break
+
+            selected_rows = df.sample(n=min(10, len(df), remaining_questions))
 
             for _, row in selected_rows.iterrows():
                 difficulty_counts['難' if '（難）' in row.iloc[1] else '中' if '（中）' in row.iloc[1] else '易'] += 1
@@ -101,6 +108,7 @@ def generate_exam(selected_files, service, class_name, exam_type, subject):
                     run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
                 question_number += 1
+                total_questions += 1
 
         # 添加難度統計
         summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
