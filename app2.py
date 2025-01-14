@@ -16,6 +16,10 @@ st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide"
 
 # Google Drive 資料夾 ID
 ROOT_FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
+SUBJECT_MAPPING = {
+    "法律": "法律EXCEL",
+    "專業": "專業EXCEL"
+}
 
 # 建立 Google Drive API 服務
 def create_drive_service():
@@ -57,8 +61,8 @@ def download_file(service, file_id):
     return fh
 
 # 列出所有題庫
-def display_topics_selection(service, root_folder_id):
-    files = list_files_recursively(service, root_folder_id)
+def display_topics_selection(service, subject_folder_id):
+    files = list_files_recursively(service, subject_folder_id)
     topics = {file['name']: file['id'] for file in files if file['mimeType'] == 'application/vnd.google-apps.folder'}
     selected_topics = st.multiselect("選擇題庫", list(topics.keys()))
 
@@ -149,19 +153,25 @@ service = create_drive_service()
 st.markdown("## 📋 基本設定")
 class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
 exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
-subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
+subject = st.selectbox("科目", ["", "法律", "專業"], help="選擇科目類型")
 
-selected_topics = display_topics_selection(service, ROOT_FOLDER_ID)
+if subject:
+    subject_folder_name = SUBJECT_MAPPING[subject]
+    files = list_files_recursively(service, ROOT_FOLDER_ID)
+    subject_folder_id = next((file['id'] for file in files if file['name'] == subject_folder_name), None)
 
-if selected_topics:
-    st.info("正在生成試卷，請稍候...")
-    exam_papers = generate_exam(selected_topics, service, class_name, exam_type, subject)
-    st.success("試卷生成完成！")
+    if subject_folder_id:
+        selected_topics = display_topics_selection(service, subject_folder_id)
+啊
+        if selected_topics:
+            st.info("正在生成試卷，請稍候...")
+            exam_papers = generate_exam(selected_topics, service, class_name, exam_type, subject)
+            st.success("試卷生成完成！")
 
-    for paper_type, file_data in exam_papers.items():
-        st.download_button(
-            label=f"下載 {paper_type}",
-            data=file_data,
-            file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
+            for paper_type, file_data in exam_papers.items():
+                st.download_button(
+                    label=f"下載 {paper_type}",
+                    data=file_data,
+                    file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
