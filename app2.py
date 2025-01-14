@@ -18,7 +18,7 @@ def create_drive_service():
     return build('drive', 'v3', credentials=credentials)
 
 def list_files_recursively(service, folder_id):
-    """遞迴列出指定資料夾及其子資料夾內的所有檔案。"""
+    """遞迴列出指定資料夾及其所有子資料夾內的所有檔案。"""
     all_files = []
     folders_to_process = [folder_id]  # 初始化待處理資料夾清單
 
@@ -57,37 +57,24 @@ def main():
     # 遞迴列出檔案
     files = list_files_recursively(service, FOLDER_ID)
     if not files:
-        st.error("該資料夾及其子資料夾中沒有任何檔案，或 Service Account 無法讀取。")
+        st.error("該資料夾及其所有子資料夾中沒有任何檔案，或 Service Account 無法讀取。")
         return
 
     # 過濾 Excel 檔案
     st.write("檔案資訊：")
     for f in files:
-        st.write(f"檔案名稱: {f['name']}, MIME 類型: {f['mimeType']}")
+        st.write(f"檔案名稱: {f['name']}, MIME 類型: {f['mimeType']} ")
 
     excel_files = [f for f in files if f['mimeType'] in [
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'application/vnd.ms-excel'
     ]]
 
-    if not excel_files:
-        st.warning("該資料夾及其子資料夾中沒有任何 Excel 檔案。")
+    file_options = {f['name']: f['id'] for f in excel_files}
+    if not file_options:
+        st.warning("該資料夾及其所有子資料夾中沒有任何 Excel 檔案。")
         return
 
-    # 處理子資料夾中的檔案
-    st.write("檢查子資料夾內的檔案：")
-    for folder in files:
-        if folder['mimeType'] == 'application/vnd.google-apps.folder':
-            subfolder_files = list_files_recursively(service, folder['id'])
-            for subfile in subfolder_files:
-                st.write(f"子資料夾檔案名稱: {subfile['name']}, MIME 類型: {subfile['mimeType']}")
-                if subfile['mimeType'] in [
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    'application/vnd.ms-excel'
-                ]:
-                    excel_files.append(subfile)
-
-    file_options = {f['name']: f['id'] for f in excel_files}
     selected_files = st.multiselect("選擇要處理的檔案", options=list(file_options.keys()))
 
     if st.button("下載並讀取選擇的檔案"):
