@@ -17,8 +17,8 @@ st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide"
 # Google Drive 資料夾 ID
 ROOT_FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
 SUBJECT_MAPPING = {
-    "法律": "法律EXCEL",
-    "專業": "專業EXCEL"
+    "法律": "法律",
+    "專業": "專業"
 }
 
 # 建立 Google Drive API 服務
