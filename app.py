@@ -19,8 +19,8 @@ st.markdown("""
 1. 填寫基本資訊。
 2. 上傳題庫檔案（6 個 Excel 文件）。
 3. 點擊生成按鈕，下載標準化的 A 卷與 B 卷。
+4. 題庫下載點－ https://drive.google.com/drive/folders/17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt?usp=sharing
 """)
-
 # 分隔線
 st.divider()
 
