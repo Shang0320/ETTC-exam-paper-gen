@@ -70,11 +70,24 @@ def main():
         'application/vnd.ms-excel'
     ]]
 
-    file_options = {f['name']: f['id'] for f in excel_files}
-    if not file_options:
+    if not excel_files:
         st.warning("該資料夾及其子資料夾中沒有任何 Excel 檔案。")
         return
 
+    # 處理子資料夾中的檔案
+    st.write("檢查子資料夾內的檔案：")
+    for folder in files:
+        if folder['mimeType'] == 'application/vnd.google-apps.folder':
+            subfolder_files = list_files_recursively(service, folder['id'])
+            for subfile in subfolder_files:
+                st.write(f"子資料夾檔案名稱: {subfile['name']}, MIME 類型: {subfile['mimeType']}")
+                if subfile['mimeType'] in [
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'application/vnd.ms-excel'
+                ]:
+                    excel_files.append(subfile)
+
+    file_options = {f['name']: f['id'] for f in excel_files}
     selected_files = st.multiselect("選擇要處理的檔案", options=list(file_options.keys()))
 
     if st.button("下載並讀取選擇的檔案"):
