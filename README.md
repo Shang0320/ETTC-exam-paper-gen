@@ -21,3 +21,13 @@ A tool to generate exam papers using Streamlit
    ```bash
    git clone https://github.com/yourusername/your-project.git
    cd your-project
+streamlit
+pandas
+python-docx
+openpyxl
+
+streamlit==1.25.0
+pandas==2.0.3
+openpyxl==3.1.2
+google-api-python-client==2.94.0
+google-auth==2.22.0
