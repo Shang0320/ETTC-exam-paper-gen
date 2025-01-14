@@ -17,8 +17,8 @@ st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide"
 # Google Drive 資料夾 ID
 ROOT_FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
 SUBJECT_MAPPING = {
-    "法律": "法律EXCEL",
-    "專業": "專業EXCEL"
+    "法律": "法律",
+    "專業": "專業"
 }
 
 # 建立 Google Drive API 服務
@@ -158,7 +158,7 @@ service = create_drive_service()
 st.markdown("## 📋 基本設定")
 class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
 exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
-subject = st.selectbox("科目", ["", "法律", "專業"], help="選擇科目類型")
+subject = st.selectbox("科目", ["-", "法律", "專業"], help="選擇科目類型")
 
 if subject:
     subject_folder_name = SUBJECT_MAPPING[subject]
