@@ -17,7 +17,7 @@ st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide"
 # Google Drive 資料夾 ID
 ROOT_FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
 
-# 建立 Google Drive API 服務 
+# 建立 Google Drive API 服務
 def create_drive_service():
     service_account_info = st.secrets["service_account_json"]
     credentials = service_account.Credentials.from_service_account_info(
@@ -79,11 +79,37 @@ def display_topics_selection(service, subject_folder_id):
         return {topic: topics[topic] for topic in selected_topics}
 
 # 生成試卷
-def generate_exam(selected_topics, service):
+def generate_exam(selected_topics, service, class_name, exam_type, subject):
     exam_papers = {}
 
     for paper_type in ["A卷", "B卷"]:
         doc = Document()
+
+        # 設置頁面大小與邊距
+        section = doc.sections[-1]
+        section.page_height, section.page_width = Cm(42.0), Cm(29.7)
+        section.orientation = WD_ORIENT.LANDSCAPE
+        section.top_margin = section.bottom_margin = Cm(1.5 / 2.54)
+        section.left_margin = section.right_margin = Cm(2 / 2.54)
+
+        # 添加標題
+        header_para = doc.add_paragraph()
+        header_run = header_para.add_run(f"海巡署教育訓練測考中心{class_name}梯志願士兵司法警察專長班{exam_type}測驗階段考試（{subject}{paper_type}）")
+        header_run.font.name = '標楷體'
+        header_run.font.size = Pt(20)
+        header_run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+        header_para.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+        # 添加考試信息
+        exam_info_para = doc.add_paragraph("選擇題：100％（共50題，每題2分）")
+        exam_info_para.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+        for run in exam_info_para.runs:
+            run.font.name = '標楷體'
+            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+            run.font.size = Pt(16)
+
+        question_number = 1
+        difficulty_counts = {'難': 0, '中': 0, '易': 0}
 
         for topic, topic_id in selected_topics.items():
             files = list_files_recursively(service, topic_id)
@@ -96,8 +122,29 @@ def generate_exam(selected_topics, service):
                 selected_rows = df.sample(n=min(10, len(df)))
 
                 for _, row in selected_rows.iterrows():
-                    question_text = f"{row.iloc[0]}、{row.iloc[1]}"
-                    doc.add_paragraph(question_text)
+                    difficulty_counts['難' if '（難）' in row.iloc[1] else '中' if '（中）' in row.iloc[1] else '易'] += 1
+                    question_text = f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}"
+                    question_para = doc.add_paragraph(question_text)
+
+                    # 段落格式設置
+                    paragraph_format = question_para.paragraph_format
+                    paragraph_format.left_indent = Cm(0)
+                    paragraph_format.right_indent = Cm(0)
+                    paragraph_format.hanging_indent = Pt(4 * 0.35)
+                    paragraph_format.space_after = Pt(0)
+                    paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+
+                    for run in question_para.runs:
+                        run.font.name = '標楷體'
+                        run.font.size = Pt(16)
+                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+
+                    question_number += 1
+
+        # 添加難度統計
+        summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
+        summary_para = doc.add_paragraph(summary_text)
+        summary_para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
 
         buffer = io.BytesIO()
         doc.save(buffer)
@@ -108,6 +155,11 @@ def generate_exam(selected_topics, service):
 
 # 主程式
 service = create_drive_service()
+st.markdown("## 📋 基本設定")
+class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
+exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
+subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
+
 subject_folder_id = display_subject_selection(service, ROOT_FOLDER_ID)
 
 if subject_folder_id:
@@ -115,13 +167,13 @@ if subject_folder_id:
 
     if selected_topics:
         st.info("正在生成試卷，請稍候...")
-        exam_papers = generate_exam(selected_topics, service)
+        exam_papers = generate_exam(selected_topics, service, class_name, exam_type, subject)
         st.success("試卷生成完成！")
 
         for paper_type, file_data in exam_papers.items():
             st.download_button(
                 label=f"下載 {paper_type}",
                 data=file_data,
-                file_name=f"{paper_type}.docx",
+                file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
