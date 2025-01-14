@@ -4,7 +4,7 @@ from googleapiclient.discovery import build
 import streamlit as st
 
 # 從 Streamlit Secrets 讀取 Service Account 憑證
-service_account_info = st.secrets["test.json"]
+service_account_info = st.secrets["service_account_json"]
 
 # 初始化 Google Drive API 憑證
 credentials = service_account.Credentials.from_service_account_info(
