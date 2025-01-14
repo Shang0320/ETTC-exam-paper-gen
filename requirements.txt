@@ -2,7 +2,7 @@ streamlit
 pandas
 python-docx
 openpyxl
-＃版本２是下面
+
 streamlit==1.25.0
 pandas==2.0.3
 openpyxl==3.1.2
