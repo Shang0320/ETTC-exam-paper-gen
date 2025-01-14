@@ -1,9 +1,3 @@
-
----
-
-### 4. **`app.py`**
-
-```python
 import streamlit as st
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -11,17 +5,15 @@ from google.oauth2 import service_account
 import pandas as pd
 import io
 
-# Google Drive API 憑證
-SERVICE_ACCOUNT_FILE = 'service_account.json'
-SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
-
 # Google Drive 資料夾 ID
 FOLDER_ID = '17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt'
 
 def create_drive_service():
-    """以 Service Account 建立 Google Drive API 服務。"""
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES
+    """以 Service Account 建立 Google Drive API 服務，從 Streamlit Secrets 中讀取憑證。"""
+    service_account_info = st.secrets["service_account_json"]
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info,
+        scopes=['https://www.googleapis.com/auth/drive.readonly']
     )
     return build('drive', 'v3', credentials=credentials)
 
