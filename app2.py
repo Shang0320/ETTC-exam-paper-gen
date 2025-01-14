@@ -17,14 +17,16 @@ def create_drive_service():
     )
     return build('drive', 'v3', credentials=credentials)
 
-
-
-
 def list_files_in_folder(service, folder_id):
     """列出指定資料夾內的檔案。"""
     query = f"'{folder_id}' in parents and trashed=false"
     result = service.files().list(q=query, fields='files(id, name, mimeType)').execute()
-    return result.get('files', [])
+    files = result.get('files', [])
+
+    # 調試輸出檔案資訊
+    st.write("檔案清單調試：", files)
+
+    return files
 
 def download_file(service, file_id):
     """從 Google Drive 下載檔案為二進位格式。"""
@@ -46,16 +48,24 @@ def main():
     # 列出檔案
     files = list_files_in_folder(service, FOLDER_ID)
     if not files:
-        st.error("資料夾中沒有任何檔案，或無法讀取。")
+        st.error("該資料夾中沒有任何檔案，或 Service Account 無法讀取。請檢查資料夾權限與檔案內容。")
         return
 
     # 過濾 Excel 檔案
+    st.write("檔案資訊：")
+    for f in files:
+        st.write(f"檔案名稱: {f['name']}, MIME 類型: {f['mimeType']}")
+
     excel_files = [f for f in files if f['mimeType'] in [
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'application/vnd.ms-excel'
     ]]
 
     file_options = {f['name']: f['id'] for f in excel_files}
+    if not file_options:
+        st.warning("該資料夾中沒有任何 Excel 檔案。")
+        return
+
     selected_files = st.multiselect("選擇要處理的檔案", options=list(file_options.keys()))
 
     if st.button("下載並讀取選擇的檔案"):
