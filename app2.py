@@ -17,6 +17,9 @@ def create_drive_service():
     )
     return build('drive', 'v3', credentials=credentials)
 
+
+
+
 def list_files_in_folder(service, folder_id):
     """列出指定資料夾內的檔案。"""
     query = f"'{folder_id}' in parents and trashed=false"
