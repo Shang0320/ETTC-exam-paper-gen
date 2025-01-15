@@ -7,6 +7,7 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.enum.section import WD_ORIENT
 import random
 import io
+import time
 
 # 主題設定
 st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide")
@@ -54,6 +55,8 @@ st.divider()
 
 if uploaded_files and len(uploaded_files) == 6:
     if st.button("✨ 開始生成試卷"):
+        start_time = time.time()  # 記錄開始時間
+
         with st.spinner("正在生成試卷，請稍候..."):
             for paper_type in ["A卷", "B卷"]:
                 doc = Document()
@@ -157,7 +160,9 @@ if uploaded_files and len(uploaded_files) == 6:
                 # 將生成的試卷緩存到 Session State
                 st.session_state.exam_papers[paper_type] = buffer.getvalue()
 
-        st.success("🎉 試卷生成完成！")
+        end_time = time.time()  # 記錄結束時間
+        elapsed_time = end_time - start_time
+        st.success(f"🎉 試卷生成完成！耗時：{elapsed_time:.2f} 秒")
 
 # 顯示下載按鈕
 if "exam_papers" in st.session_state and st.session_state.exam_papers:
@@ -165,7 +170,3 @@ if "exam_papers" in st.session_state and st.session_state.exam_papers:
     for paper_type, file_data in st.session_state.exam_papers.items():
         st.download_button(
             label=f"下載 {paper_type}",
-            data=file_data,
-            file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
