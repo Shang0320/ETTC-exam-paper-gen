@@ -32,19 +32,22 @@ def list_files(service, folder_id):
     result = service.files().list(q=query, fields='files(id, name, mimeType)').execute()
     return result.get('files', [])
 
-# 下載檔案為二進位格式
-def download_file(service, file_id):
-    request = service.files().get_media(fileId=file_id)
-    fh = io.BytesIO()
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-    fh.seek(0)
-    return fh
+# 批量下載檔案為二進位格式
+def download_files(service, file_ids):
+    files_content = {}
+    for file_id in file_ids:
+        request = service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+        fh.seek(0)
+        files_content[file_id] = fh
+    return files_content
 
 # 生成試卷
-def generate_exam(selected_files, service, class_name, exam_type, subject):
+def generate_exam(file_contents, class_name, exam_type, subject):
     exam_papers = {}
 
     for paper_type in ["A卷", "B卷"]:
@@ -77,8 +80,7 @@ def generate_exam(selected_files, service, class_name, exam_type, subject):
         difficulty_counts = {'難': 0, '中': 0, '易': 0}
         total_questions = 0  # 用於計算總題目數
 
-        for file_id in selected_files:
-            file_content = download_file(service, file_id)
+        for file_id, file_content in file_contents.items():
             df = pd.read_excel(file_content, engine='openpyxl')
             random.seed(1 if paper_type == "A卷" else 2)
 
@@ -144,7 +146,12 @@ if subject and subject != "請選擇":
             if len(selected_files) == 6 and st.button("生成考卷"):
                 selected_file_ids = [topic_options[name] for name in selected_files]
                 st.info("正在生成試卷，請稍候...")
-                exam_papers = generate_exam(selected_file_ids, service, class_name, exam_type, subject)
+
+                # 批量下載題庫
+                file_contents = download_files(service, selected_file_ids)
+
+                # 生成考卷
+                exam_papers = generate_exam(file_contents, class_name, exam_type, subject)
                 st.success("試卷生成完成！")
 
                 if "download_links" not in st.session_state:
