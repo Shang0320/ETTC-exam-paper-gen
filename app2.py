@@ -153,7 +153,7 @@ def generate_exam(file_contents, class_name, exam_type, subject, num_hard_questi
 
 # 主程式
 service = create_drive_service()
-st.markdown("## 📋 基本設定")
+st.markdown("## 📋 志兵考卷雲端出題設定")
 class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
 exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
 subject = st.selectbox("科目", ["請選擇", "法律", "專業"], help="選擇科目類型")
