@@ -47,7 +47,7 @@ def download_files(service, file_ids):
     return files_content
 
 # 生成試卷
-def generate_exam(file_contents, class_name, exam_type, subject):
+def generate_exam(file_contents, class_name, exam_type, subject, num_hard_questions):
     exam_papers = {}
 
     for paper_type in ["A卷", "B卷"]:
@@ -84,15 +84,42 @@ def generate_exam(file_contents, class_name, exam_type, subject):
             df = pd.read_excel(file_content, engine='openpyxl')
             random.seed(1 if paper_type == "A卷" else 2)
 
-            # 確保每題庫抽取的題目不超過 10 題，並且總題數不超過 50 題
+            # 優先抽取難題
+            hard_questions = df[df.iloc[:, 1].str.contains('（難）', na=False)]
+            remaining_hard_questions = num_hard_questions - difficulty_counts['難']
+            if remaining_hard_questions > 0 and not hard_questions.empty:
+                selected_hard = hard_questions.sample(n=min(remaining_hard_questions, len(hard_questions), 50 - total_questions))
+                for _, row in selected_hard.iterrows():
+                    difficulty_counts['難'] += 1
+                    question_text = f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}"
+                    question_para = doc.add_paragraph(question_text)
+
+                    # 段落格式設置
+                    paragraph_format = question_para.paragraph_format
+                    paragraph_format.left_indent = Cm(0)
+                    paragraph_format.right_indent = Cm(0)
+                    paragraph_format.hanging_indent = Pt(4 * 0.35)
+                    paragraph_format.space_after = Pt(0)
+                    paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+
+                    for run in question_para.runs:
+                        run.font.name = '標楷體'
+                        run.font.size = Pt(16)
+                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+
+                    question_number += 1
+                    total_questions += 1
+
+            # 再抽取其他題目
             remaining_questions = 50 - total_questions
             if remaining_questions <= 0:
                 break
 
-            selected_rows = df.sample(n=min(10, len(df), remaining_questions))
+            other_questions = df[~df.index.isin(hard_questions.index)]
+            selected_rows = other_questions.sample(n=min(10, len(other_questions), remaining_questions))
 
             for _, row in selected_rows.iterrows():
-                difficulty_counts['難' if '（難）' in row.iloc[1] else '中' if '（中）' in row.iloc[1] else '易'] += 1
+                difficulty_counts['中' if '（中）' in row.iloc[1] else '易'] += 1
                 question_text = f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}"
                 question_para = doc.add_paragraph(question_text)
 
@@ -130,6 +157,7 @@ st.markdown("## 📋 基本設定")
 class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
 exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
 subject = st.selectbox("科目", ["請選擇", "法律", "專業"], help="選擇科目類型")
+num_hard_questions = st.number_input("選擇難題數量", min_value=0, max_value=50, value=10, step=1, help="設定生成試卷中難題的數量")
 
 if subject and subject != "請選擇":
     st.markdown(f"### 已選科目：{subject}")
@@ -151,7 +179,7 @@ if subject and subject != "請選擇":
                 file_contents = download_files(service, selected_file_ids)
 
                 # 生成考卷
-                exam_papers = generate_exam(file_contents, class_name, exam_type, subject)
+                exam_papers = generate_exam(file_contents, class_name, exam_type, subject, num_hard_questions)
                 st.success("試卷生成完成！")
 
                 if "download_links" not in st.session_state:
