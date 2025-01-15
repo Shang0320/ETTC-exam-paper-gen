@@ -104,7 +104,7 @@ if uploaded_files and len(uploaded_files) == 6:
                             paragraph_format = question_para.paragraph_format
                             paragraph_format.left_indent = Cm(0)
                             paragraph_format.right_indent = Cm(0)
-                            paragraph_format.hanging_indent = Pt(4 * 0.35)
+                            paragraph_format.hanging_indent = Pt(8 * 0.35)
                             paragraph_format.space_after = Pt(0)
                             paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
 
