@@ -147,13 +147,21 @@ if subject and subject != "請選擇":
                 exam_papers = generate_exam(selected_file_ids, service, class_name, exam_type, subject)
                 st.success("試卷生成完成！")
 
-                for paper_type, file_data in exam_papers.items():
-                    st.download_button(
-                        label=f"下載 {paper_type}",
-                        data=file_data,
-                        file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    )
+                if "download_links" not in st.session_state:
+                    st.session_state.download_links = {}
+
+                st.session_state.download_links = {
+                    paper_type: file_data for paper_type, file_data in exam_papers.items()
+                }
+
+        if "download_links" in st.session_state:
+            for paper_type, file_data in st.session_state.download_links.items():
+                st.download_button(
+                    label=f"下載 {paper_type}",
+                    data=file_data,
+                    file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
         else:
             st.warning("未找到任何題庫檔案，請確認資料夾內容！")
     else:
