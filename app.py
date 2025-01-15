@@ -170,3 +170,7 @@ if "exam_papers" in st.session_state and st.session_state.exam_papers:
     for paper_type, file_data in st.session_state.exam_papers.items():
         st.download_button(
             label=f"下載 {paper_type}",
+            data=file_data,
+            file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
