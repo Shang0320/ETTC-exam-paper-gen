@@ -17,40 +17,22 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
     # ... (頁面設置和標題保持不變)
 
     random.seed(int(time.time()) if paper_type == "A卷" else int(time.time() + 1))
-    difficulty_counts = {'難': 0， '中': 0， '易': 0}  # 修正全形逗號為半形,
+    difficulty_counts = {'難': 0， '中': 0， '易': 0}
     question_number = 1
-    questions_per_file = [8， 8， 8， 8， 8， 10]  # 每個檔案的總抽題數
+    questions_per_file = [8， 8， 8， 8， 8， 10]
 
     # 計算此卷的難題數量
     total_hard = sum(len(bank[bank.iloc[:, 1]。str。contains('（難）', na=False) & ~bank['selected']]) for bank in question_banks)
     hard_for_this_paper = min(num_hard_questions, total_hard // 2 if paper_type == "A卷" else total_hard)
 
-    # 基準難題分配比例 [2, 3, 3, 1, 3, 3]，總和 = 15
-    base_hard_pattern = [2， 3， 3， 1， 3， 3]
-    base_total = sum(base_hard_pattern)
-    
-    # 動態計算每個檔案的難題數
-    hard_per_file = []
+    # 分區分配難題
+    hard_per_file = [0] * 6  # 每個檔案的難題數
+    remaining_hard = hard_for_this_paper
     for i in range(6):
-        # 按比例調整
-        ratio = base_hard_pattern[i] / base_total
-        calculated_hard = int(hard_for_this_paper * ratio)
-        # 限制不超過該檔案總抽題數和可用難題數
         available_hard = len(question_banks[i][question_banks[i]。iloc[:, 1]。str。contains('（難）', na=False) & ~question_banks[i]['selected']])
-        hard_per_file.append(min(calculated_hard, questions_per_file[i], available_hard))
-    
-    # 調整總和至 hard_for_this_paper
-    current_total = sum(hard_per_file)
-    if current_total < hard_for_this_paper:
-        remaining = hard_for_this_paper - current_total
-        for i in range(6):
-            if remaining == 0:
-                break
-            available_hard = len(question_banks[i][question_banks[i]。iloc[:, 1]。str。contains('（難）', na=False) & ~question_banks[i]['selected']])
-            max_additional = min(questions_per_file[i], available_hard) - hard_per_file[i]
-            additional = min(remaining, max_additional)
-            hard_per_file[i] += additional
-            remaining -= additional
+        max_hard = min(questions_per_file[i], available_hard)  # 上限為該檔案抽題數或可用難題數
+        hard_per_file[i] = min(max_hard, remaining_hard // (6 - i))  # 平均分配剩餘難題
+        remaining_hard -= hard_per_file[i]
 
     # 抽取難題
     for i, bank in enumerate(question_banks):
@@ -96,7 +78,7 @@ if uploaded_files 和 len(uploaded_files) == 6:
     else:
         total_hard = sum(len(bank[bank.iloc[:, 1]。str。contains('（難）', na=False)]) for bank in question_banks)
         if total_hard < num_hard_questions:
-            st.warning(f"總難題數 ({total_hard}) 小於需求 ({num_hard_questions})，將按比例分配至 A、B 卷。")
+            st.warning(f"總難題數 ({total_hard}) 小於需求 ({num_hard_questions})，將均分至 A、B 卷。")
         
         if st.button("✨ 開始生成試卷"):
             with st.spinner("正在生成試卷，請稍候..."):
