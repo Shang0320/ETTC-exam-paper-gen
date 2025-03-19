@@ -17,7 +17,7 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
     # ... (頁面設置和標題保持不變)
 
     random.seed(int(time.time()) if paper_type == "A卷" else int(time.time() + 1))
-    difficulty_counts = {'難': 0， '中': 0， '易': 0}
+    difficulty_counts = {'難': 0， '中': 0， '易': 0}  # 修正全形逗號為半形
     question_number = 1
     questions_per_file = [8， 8， 8， 8， 8， 10]  # 每個檔案的總抽題數
 
