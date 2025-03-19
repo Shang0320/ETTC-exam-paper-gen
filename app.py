@@ -9,7 +9,28 @@ import random
 import io
 import time
 
-# ... (頁面設置保持不變)
+# 主題設定
+st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide")
+
+# 頁面標題與簡介
+st.markdown("""
+# 📄 志兵班試卷生成器WEB UI
+**輕鬆生成專業格式的試卷！**
+""")
+
+# 主體內容佈局
+col1, col2 = st.columns([1, 2])
+
+with col1:
+    st.markdown("## 📋 基本設定")
+    class_name = st.text_input("班級名稱", value="113-X")
+    exam_type = st.selectbox("考試類型", ["期中", "期末"])
+    subject = st.selectbox("科目", ["法律", "專業"])
+    num_hard_questions = st.number_input("選擇難題數量", min_value=0, max_value=50, value=10, step=1)
+
+with col2:
+    st.markdown("## 📤 上傳題庫")
+    uploaded_files = st.file_uploader("上傳題庫檔案（最多 6 個）", accept_multiple_files=True, type=["xlsx"])
 
 # 生成試卷函數
 def generate_paper(paper_type, question_banks, num_hard_questions):
@@ -17,29 +38,23 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
     # ... (頁面設置和標題保持不變)
 
     random.seed(int(time.time()) if paper_type == "A卷" else int(time.time() + 1))
-    difficulty_counts = {'難': 0, '中': 0, '易': 0}  # 使用半形逗號
+    difficulty_counts = {'難': 0, '中': 0, '易': 0}
     question_number = 1
-    questions_per_file = [8, 8, 8, 8, 8, 10]  # 每個檔案的總抽題數
+    questions_per_file = [8, 8, 8, 8, 8, 10]
 
-    # 計算此卷的難題數量
     total_hard = sum(len(bank[bank.iloc[:, 1].str.contains('（難）', na=False) & ~bank['selected']]) for bank in question_banks)
     hard_for_this_paper = min(num_hard_questions, total_hard // 2 if paper_type == "A卷" else total_hard)
 
-    # 基準難題分配比例 [2, 3, 3, 1, 3, 3]，總和 = 15
     base_hard_pattern = [2, 3, 3, 1, 3, 3]
     base_total = sum(base_hard_pattern)
     
-    # 動態計算每個檔案的難題數
     hard_per_file = []
     for i in range(6):
-        # 按比例調整
         ratio = base_hard_pattern[i] / base_total
         calculated_hard = int(hard_for_this_paper * ratio)
-        # 限制不超過該檔案總抽題數和可用難題數
         available_hard = len(question_banks[i][question_banks[i].iloc[:, 1].str.contains('（難）', na=False) & ~question_banks[i]['selected']])
         hard_per_file.append(min(calculated_hard, questions_per_file[i], available_hard))
     
-    # 調整總和至 hard_for_this_paper
     current_total = sum(hard_per_file)
     if current_total < hard_for_this_paper:
         remaining = hard_for_this_paper - current_total
@@ -52,7 +67,6 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
             hard_per_file[i] += additional
             remaining -= additional
 
-    # 抽取難題
     for i, bank in enumerate(question_banks):
         hard_questions = bank[bank.iloc[:, 1].str.contains('（難）', na=False) & ~bank['selected']]
         if hard_per_file[i] > 0 and not hard_questions.empty:
@@ -63,7 +77,6 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
                 doc.add_paragraph(f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}")
                 question_number += 1
 
-    # 補充中、易題至指定數量
     for i, bank in enumerate(question_banks):
         remaining_to_draw = questions_per_file[i] - hard_per_file[i]
         available = bank[~bank['selected']]
@@ -85,6 +98,9 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
     return buffer.getvalue()
 
 # 主程式
+if 'exam_papers' not in st.session_state:
+    st.session_state.exam_papers = {}
+
 if uploaded_files and len(uploaded_files) == 6:
     question_banks = [pd.read_excel(file) for file in uploaded_files]
     for i, bank in enumerate(question_banks):
@@ -104,4 +120,13 @@ if uploaded_files and len(uploaded_files) == 6:
                 st.session_state.exam_papers["B卷"] = generate_paper("B卷", question_banks, num_hard_questions)
             st.success("🎉 試卷生成完成！")
 
-# ... (下載按鈕保持不變)
+# 下載按鈕
+if "exam_papers" in st.session_state and st.session_state.exam_papers:
+    st.markdown("## 📥 下載試卷")
+    for paper_type, file_data in st.session_state.exam_papers.items():
+        st.download_button(
+            label=f"下載 {paper_type}",
+            data=file_data,
+            file_name=f"{class_name}_{exam_type}_{subject}_{paper_type}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
