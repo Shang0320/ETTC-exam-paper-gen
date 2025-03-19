@@ -34,7 +34,10 @@ with col1:
     class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
     exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
     subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
-    # 注意：原本全局難題數設定在此處已由各題庫分配替代
+    st.markdown("### A卷 難題分配")
+    hard_distribution_A_input = st.text_input("請以逗號分隔輸入 A卷難題分配 (例如：5,2,2,4,3,3)", value="5,2,2,4,3,3")
+    st.markdown("### B卷 難題分配")
+    hard_distribution_B_input = st.text_input("請以逗號分隔輸入 B卷難題分配 (例如：4,3,2,3,4,2)", value="4,3,2,3,4,2")
 
 with col2:
     st.markdown("## 📤 上傳題庫")
@@ -57,9 +60,19 @@ if uploaded_files and len(uploaded_files) == 6:
     if st.button("✨ 開始生成試卷"):
         start_time = time.time()  # 記錄開始時間
 
-        # 定義各題庫抽取題數與難題數分配（可根據需求調整）
+        # 定義各題庫抽取題數
         question_distribution = [8, 8, 8, 8, 9, 9]  # 各題庫抽取的總題數，加總為 50 題
-        hard_distribution = [5, 2, 2, 4, 3, 3]        # 各題庫抽取的難題數量（介於2至5題）
+        
+        # 解析 A卷 與 B卷 難題分配設定
+        try:
+            hard_distribution_A = [int(x.strip()) for x in hard_distribution_A_input.split(",")]
+            hard_distribution_B = [int(x.strip()) for x in hard_distribution_B_input.split(",")]
+            if len(hard_distribution_A) != 6 or len(hard_distribution_B) != 6:
+                st.error("請確保A卷與B卷的難題分配各包含6個數字。")
+                st.stop()
+        except Exception as e:
+            st.error("難題分配設定格式錯誤，請檢查輸入。")
+            st.stop()
 
         for paper_type in ["A卷", "B卷"]:
             doc = Document()
@@ -88,18 +101,22 @@ if uploaded_files and len(uploaded_files) == 6:
                 run.font.size = Pt(16)
 
             question_number = 1  # 全卷題號起始值
-            # 初始化難度統計，這部分一定要保留
             difficulty_counts = {'難': 0, '中': 0, '易': 0}
+
+            # 根據當前卷別選擇對應的難題分配設定
+            if paper_type == "A卷":
+                current_hard_distribution = hard_distribution_A
+            else:
+                current_hard_distribution = hard_distribution_B
 
             # 依題庫抽題
             for i, file in enumerate(uploaded_files):
                 df = pd.read_excel(file)
                 total_needed = question_distribution[i]
-                desired_hard = hard_distribution[i]
-                # 設定隨機種子，以區分 A 卷與 B 卷，並結合題庫編號
+                desired_hard = current_hard_distribution[i]
                 random_seed = (1 if paper_type == "A卷" else 2) + i
 
-                # 先從該題庫中抽取難題
+                # 抽取難題
                 df_hard = df[df.iloc[:, 1].str.contains('（難）', na=False)]
                 n_hard_available = len(df_hard)
                 n_hard_to_select = min(desired_hard, total_needed, n_hard_available)
@@ -108,7 +125,7 @@ if uploaded_files and len(uploaded_files) == 6:
                 else:
                     selected_hard = pd.DataFrame(columns=df.columns)
 
-                # 剩餘題數從非難題中抽取
+                # 從非難題中抽取剩餘題數
                 remaining = total_needed - n_hard_to_select
                 df_nonhard = df[~df.index.isin(df_hard.index)]
                 n_nonhard_available = len(df_nonhard)
@@ -118,20 +135,18 @@ if uploaded_files and len(uploaded_files) == 6:
                 else:
                     selected_nonhard = pd.DataFrame(columns=df.columns)
 
-                # 合併難題與非難題並打亂順序
+                # 合併題目並隨機排序
                 selected_questions = pd.concat([selected_hard, selected_nonhard])
                 selected_questions = selected_questions.sample(frac=1, random_state=random_seed).reset_index(drop=True)
 
-                # 將該題庫的抽取題目依序加入文件
+                # 將抽取的題目依序加入文件
                 for _, row in selected_questions.iterrows():
                     question_text = f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}"
                     question_para = doc.add_paragraph(question_text)
                     
-                    # 段落格式設定
                     paragraph_format = question_para.paragraph_format
                     paragraph_format.left_indent = Cm(0)
                     paragraph_format.right_indent = Cm(0)
-                    # 此處使用懸掛縮排
                     paragraph_format.hanging_indent = Pt(8 * 0.35)
                     paragraph_format.space_after = Pt(0)
                     paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
@@ -141,7 +156,7 @@ if uploaded_files and len(uploaded_files) == 6:
                         run.font.size = Pt(16)
                         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                     
-                    # 更新難度統計：若題目文字中含有「（難）」，則計入難題；否則依據是否含有「（中）」計算中或易題
+                    # 更新難度統計：若題目中包含「（難）」則計入難題，否則依內容判斷中或易題
                     if '（難）' in row.iloc[1]:
                         difficulty_counts['難'] += 1
                     elif '（中）' in row.iloc[1]:
