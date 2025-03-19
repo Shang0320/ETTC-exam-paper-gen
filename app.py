@@ -141,10 +141,10 @@ if uploaded_files and len(uploaded_files) == 6:
                     question_number += 1
 
             # 可選：在文件末尾添加難題統計（若需要顯示各題庫難題數量，可在此處做計算並呈現）
-            summary_text = "（提示：各題庫難題數量依上述分配策略進行抽取）"
-            summary_para = doc.add_paragraph(summary_text)
-            summary_para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
-
+                # 添加難度統計
+                summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
+                summary_para = doc.add_paragraph(summary_text)
+                summary_para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
             # 保存到內存
             buffer = io.BytesIO()
             doc.save(buffer)
