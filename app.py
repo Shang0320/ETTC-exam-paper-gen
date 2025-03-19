@@ -16,11 +16,11 @@ st.set_page_config(page_title="試卷生成器", page_icon="📄", layout="wide"
 st.markdown("""
 # 📄 志兵班試卷生成器WEB UI
 **輕鬆生成專業格式的試卷！**  
-按照以下步驟完成試卷生成：
+請依下列步驟完成試卷生成：
 1. 填寫基本資訊。
 2. 上傳題庫檔案（6 個 Excel 文件）。
-3. 點擊生成按鈕，下載標準化的 A 卷與 B 卷。
-4. 題庫下載點－ https://drive.google.com/drive/folders/17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt?usp=sharing
+3. 點擊生成按鈕，下載 A 卷與 B 卷試卷。
+4. 題庫下載點－ [點此下載](https://drive.google.com/drive/folders/17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt?usp=sharing)
 """)
 
 # 分隔線
@@ -56,19 +56,16 @@ if uploaded_files and len(uploaded_files) == 6:
     if st.button("✨ 開始生成試卷"):
         start_time = time.time()  # 記錄開始時間
 
-        # 定義各題庫抽取題數分配（總共 50 題）
-        question_distribution = [8, 8, 8, 8, 9, 9]  # 可根據需求自行調整
+        # 設定各題庫總抽題分配（總題數 50 題）
+        total_distribution = [9, 9, 8, 8, 8, 8]
 
-        # 使用亂數產生各題庫的難題數量，範圍 1~5，且 1 與 5 出現的機率較低
-        def generate_random_hard_distribution():
-            possibilities = [1, 2, 3, 4, 5]
-            weights = [1, 2, 2, 2, 1]  # 1與5的權重較低
-            return random.choices(possibilities, weights=weights, k=6)
-        
-        hard_distribution = generate_random_hard_distribution()
-        st.write("本次亂數生成的難題分配：", hard_distribution)
+        # A 卷較偏難，設定較高難題數分配（例如 [4,3,3,3,3,3] 總和 19 題）
+        A_hard_distribution = [4, 3, 3, 3, 3, 3]
+        # B 卷較偏易，設定較低難題數分配（例如 [2,2,2,2,2,2] 總和 12 題）
+        B_hard_distribution = [2, 2, 2, 2, 2, 2]
 
-        for paper_type in ["A卷", "B卷"]:
+        # 定義生成試卷的函式
+        def generate_exam(paper_type, total_distribution, hard_distribution):
             doc = Document()
 
             # 設置頁面大小與邊距
@@ -100,13 +97,17 @@ if uploaded_files and len(uploaded_files) == 6:
 
             # 依題庫抽題
             for i, file in enumerate(uploaded_files):
+                # 對題庫先進行初步隨機排序（題庫預處理）
+                seed_shuffle = i + (100 if paper_type == "A卷" else 200)
                 df = pd.read_excel(file)
-                total_needed = question_distribution[i]
+                df = df.sample(frac=1, random_state=seed_shuffle).reset_index(drop=True)
+                
+                total_needed = total_distribution[i]
                 desired_hard = hard_distribution[i]
-                # 設定隨機種子，以區分 A 卷與 B 卷，並結合題庫編號
+                # 設定隨機種子，並加入題庫編號差異
                 random_seed = (1 if paper_type == "A卷" else 2) + i
 
-                # 先從該題庫中抽取難題
+                # 先從該題庫中抽取難題（以「（難）」為判斷標準）
                 df_hard = df[df.iloc[:, 1].str.contains('（難）', na=False)]
                 n_hard_available = len(df_hard)
                 n_hard_to_select = min(desired_hard, total_needed, n_hard_available)
@@ -147,7 +148,8 @@ if uploaded_files and len(uploaded_files) == 6:
                         run.font.size = Pt(16)
                         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                     
-                    # 更新難度統計：若題目文字中含有「（難）」，則計入難題；否則依據是否含有「（中）」計算中或易題
+                    # 更新難度統計：若題目文字中含有「（難）」則計入難題，
+                    # 否則依內容判斷是否為中或易題
                     if '（難）' in row.iloc[1]:
                         difficulty_counts['難'] += 1
                     elif '（中）' in row.iloc[1]:
@@ -166,7 +168,15 @@ if uploaded_files and len(uploaded_files) == 6:
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
-            st.session_state.exam_papers[paper_type] = buffer.getvalue()
+            return buffer.getvalue()
+
+        # 分別生成 A 卷與 B 卷，並設定不同的難題分配
+        exam_A = generate_exam("A卷", total_distribution, A_hard_distribution)
+        exam_B = generate_exam("B卷", total_distribution, B_hard_distribution)
+
+        # 將生成的試卷存入 Session State
+        st.session_state.exam_papers["A卷"] = exam_A
+        st.session_state.exam_papers["B卷"] = exam_B
 
         end_time = time.time()  # 記錄結束時間
         elapsed_time = end_time - start_time
