@@ -34,7 +34,7 @@ with col1:
     class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
     exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
     subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
-    num_hard_questions = st.number_input("選擇難題數量", min_value=0, max_value=50, value=10, step=1,遵 help="設定生成試卷中難題的數量")
+    num_hard_questions = st.number_input("選擇難題數量", min_value=0, max_value=50, value=10, step=1, help="設定生成試卷中難題的數量")  # 修正語法
 
 with col2:
     st.markdown("## 📤 上傳題庫")
