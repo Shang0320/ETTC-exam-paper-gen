@@ -34,7 +34,7 @@ with col1:
     class_name = st.text_input("班級名稱", value="113-X", help="請輸入班級名稱，例如：113-1")
     exam_type = st.selectbox("考試類型", ["期中", "期末"], help="選擇期中或期末考試")
     subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
-    num_hard_questions = st.number_input("選擇難題數量", min_value=0, max_value=50, value=10, step=1, help="設定生成試卷中難題的數量")  # 修正語法
+    num_hard_questions = st.number_input("選擇難題數量", min_value=0, max_value=50, value=10, step=1, help="設定生成試卷中難題的數量")
 
 with col2:
     st.markdown("## 📤 上傳題庫")
@@ -96,10 +96,8 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
     # 動態計算每個檔案的難題數
     hard_per_file = []
     for i in range(6):
-        # 按比例調整
         ratio = base_hard_pattern[i] / base_total
         calculated_hard = int(hard_for_this_paper * ratio)
-        # 限制不超過該檔案總抽題數和可用難題數
         available_hard = len(question_banks[i][question_banks[i].iloc[:, 1].str.contains('（難）', na=False) & ~question_banks[i]['selected']])
         hard_per_file.append(min(calculated_hard, questions_per_file[i], available_hard))
     
@@ -175,9 +173,11 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
 # 主程式
 if uploaded_files and len(uploaded_files) == 6:
     question_banks = [pd.read_excel(file) for file in uploaded_files]
+    st.write("### 除錯資訊：每個檔案的題目數")
     for i, bank in enumerate(question_banks):
         bank['selected'] = False
-        min_required = 16 if i < 5 else 20
+        min_required = 8 if i < 5 else 10  # 放寬限制，與抽題數一致
+        st.write(f"檔案 {i+1}：{len(bank)} 題")
         if len(bank) < min_required:
             st.error(f"檔案 {i+1} 題目數 ({len(bank)}) 不足，至少需要 {min_required} 題！")
             break
