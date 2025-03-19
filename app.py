@@ -20,7 +20,7 @@ st.markdown("""
 1. 填寫基本資訊。
 2. 上傳題庫檔案（6 個 Excel 文件）。
 3. 點擊生成按鈕，下載 A 卷與 B 卷試卷。
-4. 題庫下載點－ [點此下載](https://drive.google.com/drive/folders/17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt?usp=sharing)
+4. 題庫下載點－ https://drive.google.com/drive/folders/17Bcgo8ZeHz0yVhfIxBk7L2wzoiZcyoXt?usp=sharing
 """)
 
 # 分隔線
@@ -49,6 +49,9 @@ if uploaded_files:
 if "exam_papers" not in st.session_state:
     st.session_state.exam_papers = {}
 
+# 建立一個全域列表，用來記錄各題庫中 A 卷已抽取題目的原始索引（不重複出題）
+used_indices = [set() for _ in range(len(uploaded_files))]
+
 # 分隔線
 st.divider()
 
@@ -56,12 +59,12 @@ if uploaded_files and len(uploaded_files) == 6:
     if st.button("✨ 開始生成試卷"):
         start_time = time.time()  # 記錄開始時間
 
-        # 設定各題庫總抽題分配（總題數 50 題）
+        # 各題庫總抽題分配（總題數 50 題）
         total_distribution = [9, 9, 8, 8, 8, 8]
 
-        # A 卷較偏難，設定較高難題數分配（例如 [4,3,3,3,3,3] 總和 19 題）
+        # A 卷較偏難，設定較高難題數分配（例如：[4,3,3,3,3,3]，總和 19 題）
         A_hard_distribution = [4, 3, 3, 3, 3, 3]
-        # B 卷較偏易，設定較低難題數分配（例如 [2,2,2,2,2,2] 總和 12 題）
+        # B 卷較偏易，設定較低難題數分配（例如：[2,2,2,2,2,2]，總和 12 題）
         B_hard_distribution = [2, 2, 2, 2, 2, 2]
 
         # 定義生成試卷的函式
@@ -92,93 +95,125 @@ if uploaded_files and len(uploaded_files) == 6:
                 run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
             question_number = 1  # 全卷題號起始值
-            # 初始化難度統計，這部分一定要保留
+            # 初始化難度統計，此段程式碼不可刪除
             difficulty_counts = {'難': 0, '中': 0, '易': 0}
 
-            # 依題庫抽題
+            # 逐一處理每個題庫
             for i, file in enumerate(uploaded_files):
-                # 對題庫先進行初步隨機排序（題庫預處理）
-                seed_shuffle = i + (100 if paper_type == "A卷" else 200)
+                # 為確保讀取完整檔案，重設檔案指標
+                file.seek(0)
+                # 若為 B 卷，先排除 A 卷已抽取的題目
                 df = pd.read_excel(file)
-                df = df.sample(frac=1, random_state=seed_shuffle).reset_index(drop=True)
-                
+                if paper_type == "B卷":
+                    df = df[~df.index.isin(used_indices[i])]
+                # 題庫預處理：先進行隨機排序，保留原始索引
+                seed_shuffle = i + (100 if paper_type == "A卷" else 200)
+                df = df.sample(frac=1, random_state=seed_shuffle)
+
                 total_needed = total_distribution[i]
                 desired_hard = hard_distribution[i]
-                # 設定隨機種子，並加入題庫編號差異
                 random_seed = (1 if paper_type == "A卷" else 2) + i
 
-                # 先從該題庫中抽取難題（以「（難）」為判斷標準）
-                df_hard = df[df.iloc[:, 1].str.contains('（難）', na=False)]
-                n_hard_available = len(df_hard)
-                n_hard_to_select = min(desired_hard, total_needed, n_hard_available)
-                if n_hard_to_select > 0:
-                    selected_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed)
+                if paper_type == "A卷":
+                    # 先抽取難題
+                    df_hard = df[df.iloc[:, 1].str.contains('（難）', na=False)]
+                    n_hard_available = len(df_hard)
+                    n_hard_to_select = min(desired_hard, total_needed, n_hard_available)
+                    if n_hard_to_select > 0:
+                        selected_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed)
+                    else:
+                        selected_hard = pd.DataFrame(columns=df.columns)
+                    remaining = total_needed - n_hard_to_select
+                    df_nonhard = df[~df.index.isin(df_hard.index)]
+                    n_nonhard_available = len(df_nonhard)
+                    n_nonhard_to_select = min(remaining, n_nonhard_available)
+                    if n_nonhard_to_select > 0:
+                        selected_nonhard = df_nonhard.sample(n=n_nonhard_to_select, random_state=random_seed)
+                    else:
+                        selected_nonhard = pd.DataFrame(columns=df.columns)
+                    selected_questions = pd.concat([selected_hard, selected_nonhard])
+                    selected_questions = selected_questions.sample(frac=1, random_state=random_seed)
+                    # 將 A 卷抽取的題目的原始索引記錄起來，避免 B 卷重複使用
+                    used_indices[i].update(selected_questions.index.tolist())
                 else:
-                    selected_hard = pd.DataFrame(columns=df.columns)
+                    # B 卷：先抽取難題
+                    df_hard = df[df.iloc[:, 1].str.contains('（難）', na=False)]
+                    n_hard_available = len(df_hard)
+                    n_hard_to_select = min(desired_hard, n_hard_available)
+                    if n_hard_to_select > 0:
+                        selected_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed)
+                    else:
+                        selected_hard = pd.DataFrame(columns=df.columns)
+                    selected_hard_count = len(selected_hard)
+                    deficit = desired_hard - selected_hard_count
 
-                # 剩餘題數從非難題中抽取
-                remaining = total_needed - n_hard_to_select
-                df_nonhard = df[~df.index.isin(df_hard.index)]
-                n_nonhard_available = len(df_nonhard)
-                n_nonhard_to_select = min(remaining, n_nonhard_available)
-                if n_nonhard_to_select > 0:
-                    selected_nonhard = df_nonhard.sample(n=n_nonhard_to_select, random_state=random_seed)
-                else:
-                    selected_nonhard = pd.DataFrame(columns=df.columns)
+                    # 若難題不足，改以抽取中題補足
+                    if deficit > 0:
+                        df_medium = df[df.iloc[:, 1].str.contains('（中）', na=False)]
+                        # 排除已抽取為難題的項目
+                        df_medium = df_medium[~df_medium.index.isin(selected_hard.index)]
+                        n_medium_available = len(df_medium)
+                        n_medium_to_select = min(deficit, n_medium_available)
+                        if n_medium_to_select > 0:
+                            selected_medium = df_medium.sample(n=n_medium_to_select, random_state=random_seed)
+                        else:
+                            selected_medium = pd.DataFrame(columns=df.columns)
+                    else:
+                        selected_medium = pd.DataFrame(columns=df.columns)
+                    # 結合難題與補充的中題
+                    selected_hard_final = pd.concat([selected_hard, selected_medium])
+                    remaining = total_needed - len(selected_hard_final)
+                    df_remaining = df[~df.index.isin(selected_hard_final.index)]
+                    n_remaining_available = len(df_remaining)
+                    n_remaining_to_select = min(remaining, n_remaining_available)
+                    if n_remaining_to_select > 0:
+                        selected_remaining = df_remaining.sample(n=n_remaining_to_select, random_state=random_seed)
+                    else:
+                        selected_remaining = pd.DataFrame(columns=df.columns)
+                    selected_questions = pd.concat([selected_hard_final, selected_remaining])
+                    selected_questions = selected_questions.sample(frac=1, random_state=random_seed)
 
-                # 合併難題與非難題並打亂順序
-                selected_questions = pd.concat([selected_hard, selected_nonhard])
-                selected_questions = selected_questions.sample(frac=1, random_state=random_seed).reset_index(drop=True)
-
-                # 將該題庫的抽取題目依序加入文件
+                # 將抽取的題目依序加入文件，並更新難度統計
                 for _, row in selected_questions.iterrows():
                     question_text = f"（{row.iloc[0]}）{question_number}、{row.iloc[1]}"
                     question_para = doc.add_paragraph(question_text)
-                    
-                    # 段落格式設定
                     paragraph_format = question_para.paragraph_format
                     paragraph_format.left_indent = Cm(0)
                     paragraph_format.right_indent = Cm(0)
                     paragraph_format.hanging_indent = Pt(8 * 0.35)
                     paragraph_format.space_after = Pt(0)
                     paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                    
                     for run in question_para.runs:
                         run.font.name = '標楷體'
                         run.font.size = Pt(16)
                         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-                    
-                    # 更新難度統計：若題目文字中含有「（難）」則計入難題，
-                    # 否則依內容判斷是否為中或易題
                     if '（難）' in row.iloc[1]:
                         difficulty_counts['難'] += 1
                     elif '（中）' in row.iloc[1]:
                         difficulty_counts['中'] += 1
                     else:
                         difficulty_counts['易'] += 1
-
                     question_number += 1
 
-            # 添加難度統計（此段不可刪除）
+            # 添加難度統計（此段程式碼不可刪除）
             summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
             summary_para = doc.add_paragraph(summary_text)
             summary_para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
 
-            # 保存文件到內存
+            # 保存文件至記憶體
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
             return buffer.getvalue()
 
-        # 分別生成 A 卷與 B 卷，並設定不同的難題分配
+        # 分別生成 A 卷與 B 卷
         exam_A = generate_exam("A卷", total_distribution, A_hard_distribution)
         exam_B = generate_exam("B卷", total_distribution, B_hard_distribution)
 
-        # 將生成的試卷存入 Session State
         st.session_state.exam_papers["A卷"] = exam_A
         st.session_state.exam_papers["B卷"] = exam_B
 
-        end_time = time.time()  # 記錄結束時間
+        end_time = time.time()
         elapsed_time = end_time - start_time
         st.success(f"🎉 試卷生成完成！耗時：{elapsed_time:.2f} 秒")
 
