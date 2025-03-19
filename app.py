@@ -46,7 +46,7 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
         for i in range(6):
             if remaining == 0:
                 break
-            available_hard = len(question_banks[i][question_banks[i]。iloc[:, 1]。str。contains('(難)', na=False) & ~question_banks[i]['selected']])
+            available_hard = len(question_banks[i][question_banks[i].iloc[:, 1].str.contains('(難)', na=False) & ~question_banks[i]['selected']])
             max_additional = min(questions_per_file[i], available_hard) - hard_per_file[i]
             additional = min(remaining, max_additional)
             hard_per_file[i] += additional
@@ -54,13 +54,13 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
 
     # 抽取難題
     for i, bank in enumerate(question_banks):
-        hard_questions = bank[bank.iloc[:, 1]。str。contains('(難)', na=False) & ~bank['selected']]
-        if hard_per_file[i] > 0 和 not hard_questions.empty:
-            selected_hard = hard_questions.sample(n=min(hard_per_file[i]， len(hard_questions)))
+        hard_questions = bank[bank.iloc[:, 1].str.contains('(難)', na=False) & ~bank['selected']]
+        if hard_per_file[i] > 0 and not hard_questions.empty:
+            selected_hard = hard_questions.sample(n=min(hard_per_file[i], len(hard_questions)))
             for _, row in selected_hard.iterrows():
-                bank.loc[row.name， 'selected'] = True
+                bank.loc[row.name, 'selected'] = True
                 difficulty_counts['難'] += 1
-                doc.add_paragraph(f"({row.iloc[0]}){question_number}，{row.iloc[1]}")
+                doc.add_paragraph(f"({row.iloc[0]}){question_number},{row.iloc[1]}")
                 question_number += 1
 
     # 補充中、易題至指定數量
@@ -72,10 +72,10 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
             return None
         selected = available.sample(n=remaining_to_draw)
         for _, row in selected.iterrows():
-            bank.loc[row.name， 'selected'] = True
+            bank.loc[row.name, 'selected'] = True
             difficulty = '難' if '(難)' in row.iloc[1] else ('中' if '(中)' in row.iloc[1] else '易')
             difficulty_counts[difficulty] += 1
-            doc.add_paragraph(f"({row.iloc[0]}){question_number}，{row.iloc[1]}")
+            doc.add_paragraph(f"({row.iloc[0]}){question_number},{row.iloc[1]}")
             question_number += 1
 
     doc.add_paragraph(f"難:{difficulty_counts['難']},中:{difficulty_counts['中']},易:{difficulty_counts['易']}")
@@ -85,7 +85,7 @@ def generate_paper(paper_type, question_banks, num_hard_questions):
     return buffer.getvalue()
 
 # 主程式
-if uploaded_files 和 len(uploaded_files) == 6:
+if uploaded_files and len(uploaded_files) == 6:
     question_banks = [pd.read_excel(file) for file in uploaded_files]
     for i, bank in enumerate(question_banks):
         bank['selected'] = False
@@ -94,14 +94,14 @@ if uploaded_files 和 len(uploaded_files) == 6:
             st.error(f"檔案 {i+1} 題目數 ({len(bank)}) 不足, 至少需要 {min_required} 題!")
             break
     else:
-        total_hard = sum(len(bank[bank.iloc[:, 1]。str。contains('(難)', na=False)]) for bank in question_banks)
+        total_hard = sum(len(bank[bank.iloc[:, 1].str.contains('(難)', na=False)]) for bank in question_banks)
         if total_hard < num_hard_questions:
             st.warning(f"總難題數 ({total_hard}) 小於需求 ({num_hard_questions}), 將按比例分配至 A,B 卷.")
         
         if st.button("✨ 開始生成試卷"):
             with st.spinner("正在生成試卷, 請稍候..."):
-                st.session_state。exam_papers["A卷"] = generate_paper("A卷", question_banks, num_hard_questions)
-                st.session_state。exam_papers["B卷"] = generate_paper("B卷", question_banks, num_hard_questions)
+                st.session_state.exam_papers["A卷"] = generate_paper("A卷", question_banks, num_hard_questions)
+                st.session_state.exam_papers["B卷"] = generate_paper("B卷", question_banks, num_hard_questions)
             st.success("🎉 試卷生成完成!")
 
 # ... (下載按鈕保持不變)
