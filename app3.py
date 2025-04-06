@@ -265,13 +265,13 @@ if uploaded_files and len(uploaded_files) == 6:
             student_A, _ = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=True)
             student_B, _ = generate_exam("B卷", total_distribution, B_hard_distribution, standard_version=False)
 
-            st.session_state.exam_papers["上簽A卷"] = standard_A
-            st.session_state.exam_papers["上簽B卷"] = standard_B
+            st.session_state.exam_papers["A卷"] = standard_A
+            st.session_state.exam_papers["B卷"] = standard_B
             st.session_state.exam_papers["學生A卷"] = student_A
             st.session_state.exam_papers["學生B卷"] = student_B
         else:
-            st.session_state.exam_papers["上簽A卷"] = standard_A
-            st.session_state.exam_papers["上簽B卷"] = standard_B
+            st.session_state.exam_papers["A卷"] = standard_A
+            st.session_state.exam_papers["B卷"] = standard_B
 
         end_time = time.time()
         elapsed_time = end_time - start_time
