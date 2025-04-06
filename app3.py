@@ -268,13 +268,14 @@ if uploaded_files and len(uploaded_files) == 6:
                     # 記錄答案用於答案卷
                     answer_key.append((question_number, answer))
                     
-                    # 顯示題目
+                    # 顯示題目與選項串在一起，並標記難易度
+                    options_text = "(".join([f"{i+1}{opt}" for i, opt in enumerate(options)]) + ")"
                     if show_answers:
                         # 在題目前顯示答案
-                        question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text}")
+                        question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text}{options_text}（{difficulty}）")
                     else:
                         # 不顯示答案
-                        question_para = doc.add_paragraph(f"{question_number}、{question_text}")
+                        question_para = doc.add_paragraph(f"{question_number}、{question_text}{options_text}（{difficulty}）")
                     
                     paragraph_format = question_para.paragraph_format
                     paragraph_format.left_indent = Cm(0)
@@ -286,18 +287,6 @@ if uploaded_files and len(uploaded_files) == 6:
                         run.font.name = '標楷體'
                         run.font.size = Pt(16)
                         run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-                    
-                    # 添加選項
-                    for idx, option_text in enumerate(options):
-                        option_letter = ['1', '2', '3', '4'][idx]
-                        option_para = doc.add_paragraph(f"（{option_letter}）{option_text}")
-                        paragraph_format = option_para.paragraph_format
-                        paragraph_format.left_indent = Cm(1)
-                        paragraph_format.space_after = Pt(0)
-                        for run in option_para.runs:
-                            run.font.name = '標楷體'
-                            run.font.size = Pt(14)
-                            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                     
                     # 更新難度統計
                     difficulty_counts[difficulty] += 1
