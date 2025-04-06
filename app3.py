@@ -36,10 +36,10 @@ with col1:
     subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
     
     # 修改後的顯示答案選項，添加註記
-    show_answers = st.checkbox("✅在試卷上顯示答案[※上簽出題]", value=False)
+    show_answers = st.checkbox("在試卷上顯示答案[※上簽出題]", value=False)
     
     # 新增列印學生考卷版本功能
-    print_student_version = st.checkbox("✅列印學生考卷版本[※刪除答案與難度]", value=False)
+    print_student_version = st.checkbox("列印學生考卷版本[※刪除答案與難度]", value=False)
 
 with col2:
     st.markdown("## 📤 上傳題庫")
@@ -61,7 +61,7 @@ if uploaded_files:
 if "exam_papers" not in st.session_state:
     st.session_state.exam_papers = {}
 
-# 建立一個全域列表，用來記錄各題庫中 A 卷已抽取題目的原始索引（不重複出題）
+# 建立一個全域列表，用來記錄各題庫中 A 卷和 B 卷已抽取題目的原始索引
 used_indices = [set() for _ in range(len(uploaded_files))]
 
 # 分隔線
@@ -74,10 +74,13 @@ if uploaded_files and len(uploaded_files) == 6:
         # 各題庫總抽題分配（總題數 50 題）
         total_distribution = [9, 9, 8, 8, 8, 8]
 
-        # A 卷較偏難，設定較高難題數分配（例如：[4,3,3,3,3,3]，總和 19 題）
+        # A 卷較偏難，設定較高難題數分配
         A_hard_distribution = [4, 3, 3, 3, 3, 3]
-        # B 卷較偏易，設定較低難題數分配（例如：[2,2,2,2,2,2]，總和 12 題）
+        # B 卷較偏易，設定較低難題數分配
         B_hard_distribution = [2, 2, 2, 2, 2, 2]
+
+        # 用於保存選取的題目索引，確保學生版本與標準版本一致
+        selected_indices = {"A卷": [], "B卷": []}
 
         # 定義生成試卷的函式
         def generate_exam(paper_type, total_distribution, hard_distribution, student_version=False):
@@ -107,27 +110,20 @@ if uploaded_files and len(uploaded_files) == 6:
                 run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
 
             question_number = 1  # 全卷題號起始值
-            # 初始化難度統計
             difficulty_counts = {'難': 0, '中': 0, '易': 0}
-
-            # 正確答案列表（用於生成答案卷）
             answer_key = []
 
             # 逐一處理每個題庫
             for i, file in enumerate(uploaded_files):
-                # 為確保讀取完整檔案，重設檔案指標
                 file.seek(0)
                 
                 try:
-                    # 讀取 Excel 文件
                     df = pd.read_excel(file)
                     
-                    # 檢查是否有足夠的列
-                    if len(df.columns) < 5:  # 確保至少有題目、答案、難度、必考和選項
+                    if len(df.columns) < 5:
                         st.error(f"檔案 {i+1} 的列數不足，請確保題庫格式正確！")
                         return None
                     
-                    # 動態匹配並重命名欄位
                     expected_columns = ['序號', '難度', '答案', '題目', '選項1', '選項2', '選項3', '選項4']
                     current_columns = df.columns.tolist()
                     mapping = {}
@@ -136,31 +132,23 @@ if uploaded_files and len(uploaded_files) == 6:
                             if expected.lower().strip() in current.lower().strip():
                                 mapping[current] = expected
                     
-                    # 應用映射重命名
                     df = df.rename(columns=mapping)
-                    
-                    # 確保必要的欄位存在
                     missing = [col for col in expected_columns if col not in df.columns]
                     if missing:
                         st.error(f"檔案 {i+1} 缺少必要欄位：{missing}")
                         return None
                     
-                    # 資料清理
-                    df = df.dropna(subset=['題目', '答案'])  # 確保至少有題目和答案
+                    df = df.dropna(subset=['題目', '答案'])
                     
-                    # 若為 B 卷，先排除 A 卷已抽取的題目
                     if paper_type == "B卷":
                         df = df[~df.index.isin(used_indices[i])]
                     
-                    # 將難度欄位統一化
                     df['難度'] = df['難度'].astype(str).str.strip()
-                    df.loc[~df['難度'].isin(['難', '中', '易']), '難度'] = '中'  # 默認為中等難度
+                    df.loc[~df['難度'].isin(['難', '中', '易']), '難度'] = '中'
                     
-                    # 確保答案是數字1-4
                     df['答案'] = df['答案'].astype(str).str.strip()
-                    df.loc[~df['答案'].isin(['1', '2', '3', '4']), '答案'] = '1'  # 默認答案為1
+                    df.loc[~df['答案'].isin(['1', '2', '3', '4']), '答案'] = '1'
                     
-                    # 題庫預處理：隨機排序，保留原始索引
                     seed_shuffle = i + (100 if paper_type == "A卷" else 200)
                     df = df.sample(frac=1, random_state=seed_shuffle)
 
@@ -168,13 +156,11 @@ if uploaded_files and len(uploaded_files) == 6:
                     desired_hard = hard_distribution[i]
                     random_seed = (1 if paper_type == "A卷" else 2) + i
 
-                    # 根據難度標籤篩選題目
                     df_hard = df[df['難度'] == '難']
                     df_medium = df[df['難度'] == '中']
                     df_easy = df[df['難度'] == '易']
 
                     if paper_type == "A卷":
-                        # A卷：偏向難題
                         n_hard_to_select = min(desired_hard, len(df_hard))
                         additional_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed) if n_hard_to_select > 0 else pd.DataFrame()
                         
@@ -184,9 +170,9 @@ if uploaded_files and len(uploaded_files) == 6:
                         additional_questions = df_remaining.sample(n=n_remaining_to_select, random_state=random_seed) if n_remaining_to_select > 0 else pd.DataFrame()
                         
                         selected_questions = pd.concat([additional_hard, additional_questions]).sample(frac=1, random_state=random_seed)
+                        selected_indices["A卷"].extend(selected_questions.index.tolist())
                         used_indices[i].update(selected_questions.index.tolist())
                     else:
-                        # B卷：偏向易題
                         n_hard_to_select = min(B_hard_distribution[i], len(df_hard))
                         additional_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed) if n_hard_to_select > 0 else pd.DataFrame()
                         
@@ -201,33 +187,27 @@ if uploaded_files and len(uploaded_files) == 6:
                         additional_questions = df_final_remaining.sample(n=n_final_to_select, random_state=random_seed) if n_final_to_select > 0 else pd.DataFrame()
                         
                         selected_questions = pd.concat([additional_hard, additional_easy, additional_questions]).sample(frac=1, random_state=random_seed)
+                        selected_indices["B卷"].extend(selected_questions.index.tolist())
 
-                    # 將抽取的題目依序加入文件，並更新難度統計
                     for _, row in selected_questions.iterrows():
                         answer = row['答案']
                         question_text = row['題目']
                         options = [row['選項1'], row['選項2'], row['選項3'], row['選項4']]
                         difficulty = row['難度']
                         
-                        # 清理選項內容，移除多餘的空格和特殊字符
                         cleaned_options = [str(opt).strip() for opt in options]
-
-                        # 確保每個選項前面有正確的編號和括號
                         options_text = "".join([f"({i+1}){opt}" for i, opt in enumerate(cleaned_options)])
 
-                        # 記錄答案用於答案卷
                         answer_key.append((question_number, answer))
                         
-                        # 根據版本生成不同格式的試卷
-                        if student_version:
-                            # 學生考卷版本：移除答案和難度，只保留題目和選項，題號前括號為空
+                        if print_student_version:
+                            # 學生考卷版本：移除答案和難易度，只保留題目和選項，題號前括號為空
                             question_para = doc.add_paragraph(f"(){question_number}、{question_text} {options_text}")
-                        elif show_answers:
-                            # 顯示答案版本
-                            question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text} {options_text}（{difficulty}）")
                         else:
-                            # 標準版本：不顯示答案但顯示難度
-                            question_para = doc.add_paragraph(f"{question_number}、{question_text} {options_text}（{difficulty}）")
+                            if show_answers:
+                                question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text} {options_text}（{difficulty}）")
+                            else:
+                                question_para = doc.add_paragraph(f"{question_number}、{question_text} {options_text}（{difficulty}）")
                         
                         paragraph_format = question_para.paragraph_format
                         paragraph_format.left_indent = Cm(0)
@@ -240,8 +220,7 @@ if uploaded_files and len(uploaded_files) == 6:
                             run.font.size = Pt(16)
                             run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                         
-                        # 更新難度統計（僅在非學生版本時更新）
-                        if not student_version:
+                        if not print_student_version:
                             difficulty_counts[difficulty] += 1
                         question_number += 1
 
@@ -249,14 +228,12 @@ if uploaded_files and len(uploaded_files) == 6:
                     st.error(f"處理檔案 {i+1} 時發生錯誤: {str(e)}")
                     return None
 
-            # 添加標題（學生版本不顯示難度統計）
-            if not student_version:
+            if not print_student_version:
                 summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
                 summary_para = doc.add_paragraph(summary_text)
                 summary_para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
             
-            # 如果設置顯示答案，添加答案卷（僅在非學生版本時）
-            if not student_version and not show_answers:
+            if not print_student_version and not show_answers:
                 doc.add_page_break()
                 answer_title = doc.add_paragraph()
                 answer_title.add_run(f"{subject}{paper_type} 答案卷").bold = True
@@ -274,31 +251,31 @@ if uploaded_files and len(uploaded_files) == 6:
                             answer_row.add_run(f"{q_num}. {ans}     ")
                     answer_row.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
 
-            # 保存文件至記憶體
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
-            return buffer.getvalue()
+            return buffer.getvalue(), answer_key
 
-        # 生成不同版本的試卷
+        # 生成標準版本和學生版本
+        standard_A, answer_key_A = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=False)
+        standard_B, answer_key_B = generate_exam("B卷", total_distribution, B_hard_distribution, student_version=False)
+
         if print_student_version:
-            # 僅生成學生考卷版本
-            exam_A = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=True)
-            exam_B = generate_exam("B卷", total_distribution, B_hard_distribution, student_version=True)
-        else:
-            # 生成標準版本
-            exam_A = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=False)
-            exam_B = generate_exam("B卷", total_distribution, B_hard_distribution, student_version=False)
+            # 生成學生版本，使用相同的題目索引
+            student_A, _ = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=True)
+            student_B, _ = generate_exam("B卷", total_distribution, B_hard_distribution, standard_version=False)
 
-        if exam_A and exam_B:
-            st.session_state.exam_papers["A卷"] = exam_A
-            st.session_state.exam_papers["B卷"] = exam_B
-
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            st.success(f"🎉 試卷生成完成！耗時：{elapsed_time:.2f} 秒")
+            st.session_state.exam_papers["上簽A卷"] = standard_A
+            st.session_state.exam_papers["上簽B卷"] = standard_B
+            st.session_state.exam_papers["學生A卷"] = student_A
+            st.session_state.exam_papers["學生B卷"] = student_B
         else:
-            st.error("❌ 試卷生成失敗，請檢查題庫格式並重試。")
+            st.session_state.exam_papers["上簽A卷"] = standard_A
+            st.session_state.exam_papers["上簽B卷"] = standard_B
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        st.success(f"🎉 試卷生成完成！耗時：{elapsed_time:.2f} 秒")
 
 # 顯示下載按鈕
 if "exam_papers" in st.session_state and st.session_state.exam_papers:
