@@ -50,6 +50,12 @@ if uploaded_files:
     st.success(f"✅ 已成功上傳 {len(uploaded_files)} 個檔案！")
     if len(uploaded_files) != 6:
         st.warning("⚠️ 請上傳 6 個文件，否則無法生成完整試卷。")
+    else:
+        st.subheader("檢查上傳文件頭部（前5行）")
+        for i, file in enumerate(uploaded_files):
+            df = pd.read_excel(file)
+            st.write(f"檔案 {i+1} 的頭部：")
+            st.write(df.head())
 
 # 初始化 Session State 中的緩存
 if "exam_papers" not in st.session_state:
@@ -113,184 +119,154 @@ if uploaded_files and len(uploaded_files) == 6:
                 file.seek(0)
                 
                 try:
-                    # 嘗試讀取Excel檔案，使用標準列名
+                    # 讀取 Excel 文件
                     df = pd.read_excel(file)
                     
-                    # 檢查和重命名列名以匹配我們的格式
-                    if len(df.columns) >= 9:  # 確保至少有9列
-                        # 重命名列，不管原來的名稱是什麼
-                        df.columns = ['序號', '難度', '必考', '答案', '題目', '選項1', '選項2', '選項3', '選項4'] + list(df.columns[9:])
-                    else:
-                        st.error(f"檔案 {i+1} 的列數不足，請確保題庫格式正確！需要有序號、難度、必考、答案、題目和四個選項。")
+                    # 檢查是否有足夠的列
+                    if len(df.columns) < 5:  # 確保至少有題目、答案、難度、必考和選項
+                        st.error(f"檔案 {i+1} 的列數不足，請確保題庫格式正確！")
                         return None
+                    
+                    # 動態匹配並重命名欄位
+                    expected_columns = ['序號', '難度', '必考', '答案', '題目', '選項1', '選項2', '選項3', '選項4']
+                    current_columns = df.columns.tolist()
+                    mapping = {}
+                    for expected in expected_columns:
+                        for current in current_columns:
+                            if expected.lower().strip() in current.lower().strip():
+                                mapping[current] = expected
+                    
+                    # 應用映射重命名
+                    df = df.rename(columns=mapping)
+                    
+                    # 確保必要的欄位存在
+                    missing = [col for col in expected_columns if col not in df.columns]
+                    if missing:
+                        st.error(f"檔案 {i+1} 缺少必要欄位：{missing}")
+                        return None
+                    
+                    # 資料清理
+                    df = df.dropna(subset=['題目', '答案'])  # 確保至少有題目和答案
+                    
+                    # 若為 B 卷，先排除 A 卷已抽取的題目
+                    if paper_type == "B卷":
+                        df = df[~df.index.isin(used_indices[i])]
+                    
+                    # 將難度欄位統一化
+                    df['難度'] = df['難度'].astype(str).str.strip()
+                    df.loc[~df['難度'].isin(['難', '中', '易']), '難度'] = '中'  # 默認為中等難度
+                    
+                    # 將必考欄位統一化
+                    df['必考'] = df['必考'].astype(str).str.strip()
+                    df.loc[~df['必考'].isin(['是', '否']), '必考'] = '否'  # 默認為非必考
+                    
+                    # 確保答案是數字1-4
+                    df['答案'] = df['答案'].astype(str).str.strip()
+                    df.loc[~df['答案'].isin(['1', '2', '3', '4']), '答案'] = '1'  # 默認答案為1
+                    
+                    # 如果優先選擇必考題
+                    required_questions = pd.DataFrame()
+                    if include_required:
+                        required_questions = df[df['必考'] == '是']
+                        if len(required_questions) == 0:
+                            st.warning(f"警告：檔案 {i+1} 沒有必考題，將使用所有題目。")
+                        elif len(required_questions) > total_distribution[i]:
+                            required_questions = required_questions.sample(n=total_distribution[i], random_state=i+1)
+                    
+                    # 題庫預處理：先進行隨機排序，保留原始索引
+                    seed_shuffle = i + (100 if paper_type == "A卷" else 200)
+                    remaining_df = df[~df.index.isin(required_questions.index)]
+                    remaining_df = remaining_df.sample(frac=1, random_state=seed_shuffle)
+
+                    total_needed = total_distribution[i] - len(required_questions)
+                    desired_hard = hard_distribution[i]
+                    random_seed = (1 if paper_type == "A卷" else 2) + i
+
+                    # 根據難度標籤篩選題目
+                    df_hard = remaining_df[remaining_df['難度'] == '難']
+                    df_medium = remaining_df[remaining_df['難度'] == '中']
+                    df_easy = remaining_df[remaining_df['難度'] == '易']
+
+                    if paper_type == "A卷":
+                        # A卷：偏向難題
+                        req_hard_count = len(required_questions[required_questions['難度'] == '難']) if not required_questions.empty else 0
+                        additional_hard_needed = min(desired_hard - req_hard_count, total_needed)
+                        additional_hard_needed = max(0, additional_hard_needed)
                         
-                except Exception as e:
-                    st.error(f"讀取檔案 {i+1} 時發生錯誤: {str(e)}")
-                    return None
-                
-                # 排除無效資料
-                df = df.dropna(subset=['題目', '答案'])  # 確保至少有題目和答案
-                
-                # 若為 B 卷，先排除 A 卷已抽取的題目
-                if paper_type == "B卷":
-                    df = df[~df.index.isin(used_indices[i])]
-                    
-                # 將難度欄位統一化
-                df['難度'] = df['難度'].astype(str).str.strip()
-                df.loc[~df['難度'].isin(['難', '中', '易']), '難度'] = '中'  # 默認為中等難度
-                
-                # 將必考欄位統一化
-                df['必考'] = df['必考'].astype(str).str.strip()
-                df.loc[~df['必考'].isin(['是', '否']), '必考'] = '否'  # 默認為非必考
-                
-                # 確保答案是數字1-4
-                df['答案'] = df['答案'].astype(str).str.strip()
-                df.loc[~df['答案'].isin(['1', '2', '3', '4']), '答案'] = '1'  # 默認答案為1
-                
-                # 如果優先選擇必考題
-                required_questions = pd.DataFrame()
-                if include_required:
-                    # 篩選出必考題（'必考'列值為'是'的行）
-                    required_questions = df[df['必考'] == '是']
-                    # 如果必考題數量超過該題庫的分配數量，則進行隨機抽取
-                    if len(required_questions) > total_distribution[i]:
-                        required_questions = required_questions.sample(n=total_distribution[i], random_state=i+1)
-                
-                # 題庫預處理：先進行隨機排序，保留原始索引
-                seed_shuffle = i + (100 if paper_type == "A卷" else 200)
-                
-                # 排除必考題後的剩餘題目
-                remaining_df = df[~df.index.isin(required_questions.index)]
-                remaining_df = remaining_df.sample(frac=1, random_state=seed_shuffle)
-
-                total_needed = total_distribution[i] - len(required_questions)
-                desired_hard = hard_distribution[i]
-                random_seed = (1 if paper_type == "A卷" else 2) + i
-
-                # 根據難度標籤篩選題目
-                df_hard = remaining_df[remaining_df['難度'] == '難']
-                df_medium = remaining_df[remaining_df['難度'] == '中']
-                df_easy = remaining_df[remaining_df['難度'] == '易']
-
-                if paper_type == "A卷":
-                    # A卷：偏向難題
-                    # 先計算已有的必考題中各難度的數量
-                    req_hard_count = len(required_questions[required_questions['難度'] == '難'])
-                    
-                    # 計算還需要的難題數量
-                    additional_hard_needed = min(desired_hard - req_hard_count, total_needed)
-                    additional_hard_needed = max(0, additional_hard_needed)
-                    
-                    # 抽取額外的難題
-                    additional_hard = pd.DataFrame()
-                    if additional_hard_needed > 0 and len(df_hard) > 0:
-                        additional_hard = df_hard.sample(
-                            n=min(additional_hard_needed, len(df_hard)), 
-                            random_state=random_seed
-                        )
-                    
-                    # 計算剩餘需要的題目數量
-                    remaining_needed = total_needed - len(additional_hard)
-                    
-                    # 優先從中等難度題目中選取
-                    remaining_df_for_selection = remaining_df[
-                        ~remaining_df.index.isin(additional_hard.index)
-                    ]
-                    
-                    additional_questions = pd.DataFrame()
-                    if remaining_needed > 0 and len(remaining_df_for_selection) > 0:
-                        additional_questions = remaining_df_for_selection.sample(
-                            n=min(remaining_needed, len(remaining_df_for_selection)), 
-                            random_state=random_seed
-                        )
-                    
-                    # 合併所有選取的題目
-                    selected_questions = pd.concat([required_questions, additional_hard, additional_questions])
-                    
-                    # 重新洗牌所有選取的題目
-                    selected_questions = selected_questions.sample(frac=1, random_state=random_seed)
-                    
-                    # 將 A 卷抽取的題目的原始索引記錄起來，避免 B 卷重複使用
-                    used_indices[i].update(selected_questions.index.tolist())
-                else:
-                    # B卷：偏向易題
-                    # 先計算已有的必考題中各難度的數量
-                    req_hard_count = len(required_questions[required_questions['難度'] == '難'])
-                    
-                    # 計算還需要的難題數量（B卷難題較少）
-                    additional_hard_needed = min(B_hard_distribution[i] - req_hard_count, total_needed)
-                    additional_hard_needed = max(0, additional_hard_needed)
-                    
-                    # 抽取額外的難題
-                    additional_hard = pd.DataFrame()
-                    if additional_hard_needed > 0 and len(df_hard) > 0:
-                        additional_hard = df_hard.sample(
-                            n=min(additional_hard_needed, len(df_hard)), 
-                            random_state=random_seed
-                        )
-                    
-                    # 優先抽取容易題目
-                    remaining_needed = total_needed - len(additional_hard)
-                    easy_to_select = min(remaining_needed, len(df_easy))
-                    
-                    additional_easy = pd.DataFrame()
-                    if easy_to_select > 0:
-                        additional_easy = df_easy.sample(n=easy_to_select, random_state=random_seed)
-                    
-                    # 如果還需要更多題目，從中等難度中選取
-                    remaining_needed -= len(additional_easy)
-                    remaining_df_for_selection = remaining_df[
-                        ~remaining_df.index.isin(additional_hard.index) & 
-                        ~remaining_df.index.isin(additional_easy.index)
-                    ]
-                    
-                    additional_questions = pd.DataFrame()
-                    if remaining_needed > 0 and len(remaining_df_for_selection) > 0:
-                        additional_questions = remaining_df_for_selection.sample(
-                            n=min(remaining_needed, len(remaining_df_for_selection)), 
-                            random_state=random_seed
-                        )
-                    
-                    # 合併所有選取的題目
-                    selected_questions = pd.concat([required_questions, additional_hard, additional_easy, additional_questions])
-                    
-                    # 重新洗牌所有選取的題目
-                    selected_questions = selected_questions.sample(frac=1, random_state=random_seed)
-
-                # 將抽取的題目依序加入文件，並更新難度統計
-                for _, row in selected_questions.iterrows():
-                    # 獲取題目資訊
-                    answer = row['答案']
-                    question_text = row['題目']
-                    options = [row['選項1'], row['選項2'], row['選項3'], row['選項4']]
-                    difficulty = row['難度']
-                    
-                    # 記錄答案用於答案卷
-                    answer_key.append((question_number, answer))
-                    
-                    # 顯示題目與選項串在一起，並標記難易度
-                    options_text = "(".join([f"{i+1}{opt}" for i, opt in enumerate(options)]) + ")"
-                    if show_answers:
-                        # 在題目前顯示答案
-                        question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text}{options_text}（{difficulty}）")
+                        additional_hard = pd.DataFrame()
+                        if additional_hard_needed > 0 and len(df_hard) > 0:
+                            additional_hard = df_hard.sample(n=min(additional_hard_needed, len(df_hard)), random_state=random_seed)
+                        
+                        remaining_needed = total_needed - len(additional_hard)
+                        remaining_df_for_selection = remaining_df[~remaining_df.index.isin(additional_hard.index)]
+                        
+                        additional_questions = pd.DataFrame()
+                        if remaining_needed > 0 and len(remaining_df_for_selection) > 0:
+                            additional_questions = remaining_df_for_selection.sample(n=min(remaining_needed, len(remaining_df_for_selection)), random_state=random_seed)
+                        
+                        selected_questions = pd.concat([required_questions, additional_hard, additional_questions])
+                        selected_questions = selected_questions.sample(frac=1, random_state=random_seed)
+                        
+                        used_indices[i].update(selected_questions.index.tolist())
                     else:
-                        # 不顯示答案
-                        question_para = doc.add_paragraph(f"{question_number}、{question_text}{options_text}（{difficulty}）")
-                    
-                    paragraph_format = question_para.paragraph_format
-                    paragraph_format.left_indent = Cm(0)
-                    paragraph_format.right_indent = Cm(0)
-                    paragraph_format.hanging_indent = Pt(8 * 0.35)
-                    paragraph_format.space_after = Pt(0)
-                    paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                    for run in question_para.runs:
-                        run.font.name = '標楷體'
-                        run.font.size = Pt(16)
-                        run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-                    
-                    # 更新難度統計
-                    difficulty_counts[difficulty] += 1
-                    question_number += 1
+                        # B卷：偏向易題
+                        req_hard_count = len(required_questions[required_questions['難度'] == '難']) if not required_questions.empty else 0
+                        additional_hard_needed = min(B_hard_distribution[i] - req_hard_count, total_needed)
+                        additional_hard_needed = max(0, additional_hard_needed)
+                        
+                        additional_hard = pd.DataFrame()
+                        if additional_hard_needed > 0 and len(df_hard) > 0:
+                            additional_hard = df_hard.sample(n=min(additional_hard_needed, len(df_hard)), random_state=random_seed)
+                        
+                        remaining_needed = total_needed - len(additional_hard)
+                        easy_to_select = min(remaining_needed, len(df_easy))
+                        
+                        additional_easy = pd.DataFrame()
+                        if easy_to_select > 0:
+                            additional_easy = df_easy.sample(n=easy_to_select, random_state=random_seed)
+                        
+                        remaining_needed -= len(additional_easy)
+                        remaining_df_for_selection = remaining_df[~remaining_df.index.isin(additional_hard.index) & ~remaining_df.index.isin(additional_easy.index)]
+                        
+                        additional_questions = pd.DataFrame()
+                        if remaining_needed > 0 and len(remaining_df_for_selection) > 0:
+                            additional_questions = remaining_df_for_selection.sample(n=min(remaining_needed, len(remaining_df_for_selection)), random_state=random_seed)
+                        
+                        selected_questions = pd.concat([required_questions, additional_hard, additional_easy, additional_questions])
+                        selected_questions = selected_questions.sample(frac=1, random_state=random_seed)
+
+                    # 將抽取的題目依序加入文件，並更新難度統計
+                    for _, row in selected_questions.iterrows():
+                        answer = row['答案']
+                        question_text = row['題目']
+                        options = [row['選項1'], row['選項2'], row['選項3'], row['選項4']]
+                        difficulty = row['難度']
+                        
+                        answer_key.append((question_number, answer))
+                        
+                        options_text = "(".join([f"{i+1}{opt}" for i, opt in enumerate(options)]) + ")"
+                        if show_answers:
+                            question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text}{options_text}（{difficulty}）")
+                        else:
+                            question_para = doc.add_paragraph(f"{question_number}、{question_text}{options_text}（{difficulty}）")
+                        
+                        paragraph_format = question_para.paragraph_format
+                        paragraph_format.left_indent = Cm(0)
+                        paragraph_format.right_indent = Cm(0)
+                        paragraph_format.hanging_indent = Pt(8 * 0.35)
+                        paragraph_format.space_after = Pt(0)
+                        paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+                        for run in question_para.runs:
+                            run.font.name = '標楷體'
+                            run.font.size = Pt(16)
+                            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+                        
+                        difficulty_counts[difficulty] += 1
+                        question_number += 1
+
+                except Exception as e:
+                    st.error(f"處理檔案 {i+1} 時發生錯誤: {str(e)}")
+                    return None
 
             # 添加難度統計
             summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
@@ -304,7 +280,6 @@ if uploaded_files and len(uploaded_files) == 6:
                 answer_title.add_run(f"{subject}{paper_type} 答案卷").bold = True
                 answer_title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                 
-                # 以5列的方式排列答案
                 answers_per_row = 5
                 num_rows = (len(answer_key) + answers_per_row - 1) // answers_per_row
                 
@@ -317,7 +292,6 @@ if uploaded_files and len(uploaded_files) == 6:
                             answer_row.add_run(f"{q_num}. {ans}     ")
                     answer_row.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
 
-            # 保存文件至記憶體
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
