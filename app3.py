@@ -112,15 +112,41 @@ if uploaded_files and len(uploaded_files) == 6:
                 # 為確保讀取完整檔案，重設檔案指標
                 file.seek(0)
                 
-                # 定義列名，更明確的處理新格式
-                column_names = ['序號', '難度', '必考', '答案', '題目', '選項1', '選項2', '選項3', '選項4']
+                try:
+                    # 嘗試讀取Excel檔案，使用標準列名
+                    df = pd.read_excel(file)
+                    
+                    # 檢查和重命名列名以匹配我們的格式
+                    if len(df.columns) >= 9:  # 確保至少有9列
+                        # 重命名列，不管原來的名稱是什麼
+                        df.columns = ['序號', '難度', '必考', '答案', '題目', '選項1', '選項2', '選項3', '選項4'] + list(df.columns[9:])
+                    else:
+                        st.error(f"檔案 {i+1} 的列數不足，請確保題庫格式正確！需要有序號、難度、必考、答案、題目和四個選項。")
+                        return None
+                        
+                except Exception as e:
+                    st.error(f"讀取檔案 {i+1} 時發生錯誤: {str(e)}")
+                    return None
+                
+                # 排除無效資料
+                df = df.dropna(subset=['題目', '答案'])  # 確保至少有題目和答案
                 
                 # 若為 B 卷，先排除 A 卷已抽取的題目
-                df = pd.read_excel(file, names=column_names)
-                
                 if paper_type == "B卷":
                     df = df[~df.index.isin(used_indices[i])]
                     
+                # 將難度欄位統一化
+                df['難度'] = df['難度'].astype(str).str.strip()
+                df.loc[~df['難度'].isin(['難', '中', '易']), '難度'] = '中'  # 默認為中等難度
+                
+                # 將必考欄位統一化
+                df['必考'] = df['必考'].astype(str).str.strip()
+                df.loc[~df['必考'].isin(['是', '否']), '必考'] = '否'  # 默認為非必考
+                
+                # 確保答案是數字1-4
+                df['答案'] = df['答案'].astype(str).str.strip()
+                df.loc[~df['答案'].isin(['1', '2', '3', '4']), '答案'] = '1'  # 默認答案為1
+                
                 # 如果優先選擇必考題
                 required_questions = pd.DataFrame()
                 if include_required:
@@ -312,12 +338,15 @@ if uploaded_files and len(uploaded_files) == 6:
         exam_A = generate_exam("A卷", total_distribution, A_hard_distribution)
         exam_B = generate_exam("B卷", total_distribution, B_hard_distribution)
 
-        st.session_state.exam_papers["A卷"] = exam_A
-        st.session_state.exam_papers["B卷"] = exam_B
+        if exam_A and exam_B:
+            st.session_state.exam_papers["A卷"] = exam_A
+            st.session_state.exam_papers["B卷"] = exam_B
 
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        st.success(f"🎉 試卷生成完成！耗時：{elapsed_time:.2f} 秒")
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            st.success(f"🎉 試卷生成完成！耗時：{elapsed_time:.2f} 秒")
+        else:
+            st.error("❌ 試卷生成失敗，請檢查題庫格式並重試。")
 
 # 顯示下載按鈕
 if "exam_papers" in st.session_state and st.session_state.exam_papers:
