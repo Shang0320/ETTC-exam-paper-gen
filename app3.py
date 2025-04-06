@@ -36,10 +36,10 @@ with col1:
     subject = st.selectbox("科目", ["法律", "專業"], help="選擇科目類型")
     
     # 修改後的顯示答案選項，添加註記
-    show_answers = st.checkbox("在試卷上顯示答案[※上簽出題]", value=False)
+    show_answers = st.checkbox("✅在試卷上顯示答案[※上簽出題]", value=False)
     
     # 新增列印學生考卷版本功能
-    print_student_version = st.checkbox("列印學生考卷版本[※刪除答案與難度]", value=False)
+    print_student_version = st.checkbox("✅列印學生考卷版本[※刪除答案與難度]", value=False)
 
 with col2:
     st.markdown("## 📤 上傳題庫")
@@ -113,11 +113,11 @@ if uploaded_files and len(uploaded_files) == 6:
             difficulty_counts = {'難': 0, '中': 0, '易': 0}
             answer_key = []
 
-            # 逐一處理每個題庫
-            for i, file in enumerate(uploaded_files):
-                file.seek(0)
-                
-                try:
+            # 如果是學生版本，使用標準版本的索引
+            if student_version and selected_indices[paper_type]:
+                all_selected_questions = pd.DataFrame()
+                for i, file in enumerate(uploaded_files):
+                    file.seek(0)
                     df = pd.read_excel(file)
                     
                     if len(df.columns) < 5:
@@ -139,101 +139,133 @@ if uploaded_files and len(uploaded_files) == 6:
                         return None
                     
                     df = df.dropna(subset=['題目', '答案'])
+                    selected_questions = df.loc[df.index.isin(selected_indices[paper_type])]
+                    all_selected_questions = pd.concat([all_selected_questions, selected_questions])
+            else:
+                # 逐一處理每個題庫，生成標準版本
+                all_selected_questions = pd.DataFrame()
+                for i, file in enumerate(uploaded_files):
+                    file.seek(0)
                     
-                    if paper_type == "B卷":
-                        df = df[~df.index.isin(used_indices[i])]
-                    
-                    df['難度'] = df['難度'].astype(str).str.strip()
-                    df.loc[~df['難度'].isin(['難', '中', '易']), '難度'] = '中'
-                    
-                    df['答案'] = df['答案'].astype(str).str.strip()
-                    df.loc[~df['答案'].isin(['1', '2', '3', '4']), '答案'] = '1'
-                    
-                    seed_shuffle = i + (100 if paper_type == "A卷" else 200)
-                    df = df.sample(frac=1, random_state=seed_shuffle)
+                    try:
+                        df = pd.read_excel(file)
+                        
+                        if len(df.columns) < 5:
+                            st.error(f"檔案 {i+1} 的列數不足，請確保題庫格式正確！")
+                            return None
+                        
+                        expected_columns = ['序號', '難度', '答案', '題目', '選項1', '選項2', '選項3', '選項4']
+                        current_columns = df.columns.tolist()
+                        mapping = {}
+                        for expected in expected_columns:
+                            for current in current_columns:
+                                if expected.lower().strip() in current.lower().strip():
+                                    mapping[current] = expected
+                        
+                        df = df.rename(columns=mapping)
+                        missing = [col for col in expected_columns if col not in df.columns]
+                        if missing:
+                            st.error(f"檔案 {i+1} 缺少必要欄位：{missing}")
+                            return None
+                        
+                        df = df.dropna(subset=['題目', '答案'])
+                        
+                        if paper_type == "B卷":
+                            df = df[~df.index.isin(used_indices[i])]
+                        
+                        df['難度'] = df['難度'].astype(str).str.strip()
+                        df.loc[~df['難度'].isin(['難', '中', '易']), '難度'] = '中'
+                        
+                        df['答案'] = df['答案'].astype(str).str.strip()
+                        df.loc[~df['答案'].isin(['1', '2', '3', '4']), '答案'] = '1'
+                        
+                        seed_shuffle = i + (100 if paper_type == "A卷" else 200)
+                        df = df.sample(frac=1, random_state=seed_shuffle)
 
-                    total_needed = total_distribution[i]
-                    desired_hard = hard_distribution[i]
-                    random_seed = (1 if paper_type == "A卷" else 2) + i
+                        total_needed = total_distribution[i]
+                        desired_hard = hard_distribution[i]
+                        random_seed = (1 if paper_type == "A卷" else 2) + i
 
-                    df_hard = df[df['難度'] == '難']
-                    df_medium = df[df['難度'] == '中']
-                    df_easy = df[df['難度'] == '易']
+                        df_hard = df[df['難度'] == '難']
+                        df_medium = df[df['難度'] == '中']
+                        df_easy = df[df['難度'] == '易']
 
-                    if paper_type == "A卷":
-                        n_hard_to_select = min(desired_hard, len(df_hard))
-                        additional_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed) if n_hard_to_select > 0 else pd.DataFrame()
-                        
-                        remaining = total_needed - len(additional_hard)
-                        df_remaining = df[~df.index.isin(additional_hard.index)]
-                        n_remaining_to_select = min(remaining, len(df_remaining))
-                        additional_questions = df_remaining.sample(n=n_remaining_to_select, random_state=random_seed) if n_remaining_to_select > 0 else pd.DataFrame()
-                        
-                        selected_questions = pd.concat([additional_hard, additional_questions]).sample(frac=1, random_state=random_seed)
-                        selected_indices["A卷"].extend(selected_questions.index.tolist())
-                        used_indices[i].update(selected_questions.index.tolist())
-                    else:
-                        n_hard_to_select = min(B_hard_distribution[i], len(df_hard))
-                        additional_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed) if n_hard_to_select > 0 else pd.DataFrame()
-                        
-                        remaining = total_needed - len(additional_hard)
-                        df_remaining = df[~df.index.isin(additional_hard.index)]
-                        n_easy_to_select = min(remaining, len(df_easy))
-                        additional_easy = df_easy.sample(n=n_easy_to_select, random_state=random_seed) if n_easy_to_select > 0 else pd.DataFrame()
-                        
-                        remaining_after_easy = remaining - len(additional_easy)
-                        df_final_remaining = df_remaining[~df_remaining.index.isin(additional_easy.index)]
-                        n_final_to_select = min(remaining_after_easy, len(df_final_remaining))
-                        additional_questions = df_final_remaining.sample(n=n_final_to_select, random_state=random_seed) if n_final_to_select > 0 else pd.DataFrame()
-                        
-                        selected_questions = pd.concat([additional_hard, additional_easy, additional_questions]).sample(frac=1, random_state=random_seed)
-                        selected_indices["B卷"].extend(selected_questions.index.tolist())
-
-                    for _, row in selected_questions.iterrows():
-                        answer = row['答案']
-                        question_text = row['題目']
-                        options = [row['選項1'], row['選項2'], row['選項3'], row['選項4']]
-                        difficulty = row['難度']
-                        
-                        cleaned_options = [str(opt).strip() for opt in options]
-                        options_text = "".join([f"({i+1}){opt}" for i, opt in enumerate(cleaned_options)])
-
-                        answer_key.append((question_number, answer))
-                        
-                        if print_student_version:
-                            # 學生考卷版本：移除答案和難易度，只保留題目和選項，題號前括號為空
-                            question_para = doc.add_paragraph(f"(){question_number}、{question_text} {options_text}")
+                        if paper_type == "A卷":
+                            n_hard_to_select = min(desired_hard, len(df_hard))
+                            additional_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed) if n_hard_to_select > 0 else pd.DataFrame()
+                            
+                            remaining = total_needed - len(additional_hard)
+                            df_remaining = df[~df.index.isin(additional_hard.index)]
+                            n_remaining_to_select = min(remaining, len(df_remaining))
+                            additional_questions = df_remaining.sample(n=n_remaining_to_select, random_state=random_seed) if n_remaining_to_select > 0 else pd.DataFrame()
+                            
+                            selected_questions = pd.concat([additional_hard, additional_questions]).sample(frac=1, random_state=random_seed)
+                            selected_indices["A卷"].extend(selected_questions.index.tolist())
+                            used_indices[i].update(selected_questions.index.tolist())
                         else:
-                            if show_answers:
-                                question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text} {options_text}（{difficulty}）")
-                            else:
-                                question_para = doc.add_paragraph(f"{question_number}、{question_text} {options_text}（{difficulty}）")
-                        
-                        paragraph_format = question_para.paragraph_format
-                        paragraph_format.left_indent = Cm(0)
-                        paragraph_format.right_indent = Cm(0)
-                        paragraph_format.hanging_indent = Pt(8 * 0.35)
-                        paragraph_format.space_after = Pt(0)
-                        paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
-                        for run in question_para.runs:
-                            run.font.name = '標楷體'
-                            run.font.size = Pt(16)
-                            run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
-                        
-                        if not print_student_version:
-                            difficulty_counts[difficulty] += 1
-                        question_number += 1
+                            n_hard_to_select = min(B_hard_distribution[i], len(df_hard))
+                            additional_hard = df_hard.sample(n=n_hard_to_select, random_state=random_seed) if n_hard_to_select > 0 else pd.DataFrame()
+                            
+                            remaining = total_needed - len(additional_hard)
+                            df_remaining = df[~df.index.isin(additional_hard.index)]
+                            n_easy_to_select = min(remaining, len(df_easy))
+                            additional_easy = df_easy.sample(n=n_easy_to_select, random_state=random_seed) if n_easy_to_select > 0 else pd.DataFrame()
+                            
+                            remaining_after_easy = remaining - len(additional_easy)
+                            df_final_remaining = df_remaining[~df_remaining.index.isin(additional_easy.index)]
+                            n_final_to_select = min(remaining_after_easy, len(df_final_remaining))
+                            additional_questions = df_final_remaining.sample(n=n_final_to_select, random_state=random_seed) if n_final_to_select > 0 else pd.DataFrame()
+                            
+                            selected_questions = pd.concat([additional_hard, additional_easy, additional_questions]).sample(frac=1, random_state=random_seed)
+                            selected_indices["B卷"].extend(selected_questions.index.tolist())
 
-                except Exception as e:
-                    st.error(f"處理檔案 {i+1} 時發生錯誤: {str(e)}")
-                    return None
+                        all_selected_questions = pd.concat([all_selected_questions, selected_questions])
 
-            if not print_student_version:
+                    except Exception as e:
+                        st.error(f"處理檔案 {i+1} 時發生錯誤: {str(e)}")
+                        return None
+
+            # 將選取的題目依序加入文件
+            for _, row in all_selected_questions.iterrows():
+                answer = row['答案']
+                question_text = row['題目']
+                options = [row['選項1'], row['選項2'], row['選項3'], row['選項4']]
+                difficulty = row['難度']
+                
+                cleaned_options = [str(opt).strip() for opt in options]
+                options_text = "".join([f"({i+1}){opt}" for i, opt in enumerate(cleaned_options)])
+
+                answer_key.append((question_number, answer))
+                
+                if student_version:
+                    question_para = doc.add_paragraph(f"(){question_number}、{question_text} {options_text}")
+                else:
+                    if show_answers:
+                        question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text} {options_text}（{difficulty}）")
+                    else:
+                        question_para = doc.add_paragraph(f"{question_number}、{question_text} {options_text}（{difficulty}）")
+                
+                paragraph_format = question_para.paragraph_format
+                paragraph_format.left_indent = Cm(0)
+                paragraph_format.right_indent = Cm(0)
+                paragraph_format.hanging_indent = Pt(8 * 0.35)
+                paragraph_format.space_after = Pt(0)
+                paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
+                for run in question_para.runs:
+                    run.font.name = '標楷體'
+                    run.font.size = Pt(16)
+                    run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
+                
+                if not student_version:
+                    difficulty_counts[difficulty] += 1
+                question_number += 1
+
+            if not student_version:
                 summary_text = f"難：{difficulty_counts['難']}，中：{difficulty_counts['中']}，易：{difficulty_counts['易']}"
                 summary_para = doc.add_paragraph(summary_text)
                 summary_para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
             
-            if not print_student_version and not show_answers:
+            if not student_version and not show_answers:
                 doc.add_page_break()
                 answer_title = doc.add_paragraph()
                 answer_title.add_run(f"{subject}{paper_type} 答案卷").bold = True
@@ -254,16 +286,16 @@ if uploaded_files and len(uploaded_files) == 6:
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
-            return buffer.getvalue(), answer_key
+            return buffer.getvalue()
 
         # 生成標準版本和學生版本
-        standard_A, answer_key_A = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=False)
-        standard_B, answer_key_B = generate_exam("B卷", total_distribution, B_hard_distribution, student_version=False)
+        standard_A = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=False)
+        standard_B = generate_exam("B卷", total_distribution, B_hard_distribution, student_version=False)
 
         if print_student_version:
             # 生成學生版本，使用相同的題目索引
-            student_A, _ = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=True)
-            student_B, _ = generate_exam("B卷", total_distribution, B_hard_distribution, standard_version=False)
+            student_A = generate_exam("A卷", total_distribution, A_hard_distribution, student_version=True)
+            student_B = generate_exam("B卷", total_distribution, B_hard_distribution, student_version=True)
 
             st.session_state.exam_papers["A卷"] = standard_A
             st.session_state.exam_papers["B卷"] = standard_B
