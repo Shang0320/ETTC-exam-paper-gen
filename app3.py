@@ -242,13 +242,20 @@ if uploaded_files and len(uploaded_files) == 6:
                         options = [row['選項1'], row['選項2'], row['選項3'], row['選項4']]
                         difficulty = row['難度']
                         
+                        # 清理選項內容，移除多餘的空格和特殊字符
+                        cleaned_options = [str(opt).strip() for opt in options]
+
+                        # 確保每個選項前面有正確的編號和括號
+                        options_text = "".join([f"({i+1}){opt}" for i, opt in enumerate(cleaned_options)])
+
+                        # 記錄答案用於答案卷
                         answer_key.append((question_number, answer))
                         
-                        options_text = "(".join([f"{i+1}{opt}" for i, opt in enumerate(options)]) + ")"
+                        # 拼接題目和選項，確保格式清晰
                         if show_answers:
-                            question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text}{options_text}（{difficulty}）")
+                            question_para = doc.add_paragraph(f"（{answer}）{question_number}、{question_text} {options_text}（{difficulty}）")
                         else:
-                            question_para = doc.add_paragraph(f"{question_number}、{question_text}{options_text}（{difficulty}）")
+                            question_para = doc.add_paragraph(f"{question_number}、{question_text} {options_text}（{difficulty}）")
                         
                         paragraph_format = question_para.paragraph_format
                         paragraph_format.left_indent = Cm(0)
@@ -261,6 +268,7 @@ if uploaded_files and len(uploaded_files) == 6:
                             run.font.size = Pt(16)
                             run._element.rPr.rFonts.set(qn('w:eastAsia'), '標楷體')
                         
+                        # 更新難度統計
                         difficulty_counts[difficulty] += 1
                         question_number += 1
 
@@ -280,6 +288,7 @@ if uploaded_files and len(uploaded_files) == 6:
                 answer_title.add_run(f"{subject}{paper_type} 答案卷").bold = True
                 answer_title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                 
+                # 以5列的方式排列答案
                 answers_per_row = 5
                 num_rows = (len(answer_key) + answers_per_row - 1) // answers_per_row
                 
@@ -292,6 +301,7 @@ if uploaded_files and len(uploaded_files) == 6:
                             answer_row.add_run(f"{q_num}. {ans}     ")
                     answer_row.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
 
+            # 保存文件至記憶體
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
